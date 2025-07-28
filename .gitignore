@@ -1,0 +1,27 @@
+# Trading System Ignores
+*.parquet
+*.pkl
+*.cache
+polygon/*.parquet
+polygon/*.pkl
+polygon/*.cache
+polygon/**/*.parquet
+polygon/**/*.pkl
+polygon/**/*.cache
+polygon/temp/
+polygon/cache/
+*.log
+*.tmp
+*.temp
+__pycache__/
+*.pyc
+.env
+*api_key*
+*secret*
+*credentials*
+.DS_Store
+Thumbs.db
+*.swp
+.vscode/settings.json
+execute/polygon_cleanup.log
+execute/git_operations.log

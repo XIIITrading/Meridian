@@ -1,0 +1,167 @@
+{
+  "report_timestamp": "2025-07-04T12:54:02.830937",
+  "session_stats": {
+    "total_requests": 5,
+    "successful_requests": 5,
+    "failed_requests": 0,
+    "api_calls": 5,
+    "cache_hits": 0,
+    "total_processing_time_ms": 2370.394468307495
+  },
+  "by_plugin": {
+    "DataCoordinator": {
+      "total_requests": 5,
+      "successful": 5,
+      "failed": 0,
+      "by_data_type": {
+        "bars": 3,
+        "trades": 1,
+        "quotes": 1
+      },
+      "requests": [
+        {
+          "request_id": "DataCoordinator_AAPL_1min_1751633640451",
+          "symbol": "AAPL",
+          "data_type": "bars",
+          "timeframe": "1min",
+          "requested_start": "2025-01-15T11:48:00+00:00",
+          "requested_end": "2025-01-15T14:48:00+00:00",
+          "source": "polygon_api",
+          "success": true,
+          "returned_count": 167,
+          "processing_time_ms": 486.5398406982422,
+          "actual_start": "2025-01-15T11:48:00+00:00",
+          "actual_end": "2025-01-15T14:48:00+00:00"
+        },
+        {
+          "request_id": "DataCoordinator_AAPL_5min_1751633640937",
+          "symbol": "AAPL",
+          "data_type": "bars",
+          "timeframe": "5min",
+          "requested_start": "2024-12-31T04:12:00+00:00",
+          "requested_end": "2025-01-17T00:12:00+00:00",
+          "source": "polygon_api",
+          "success": true,
+          "returned_count": 2074,
+          "processing_time_ms": 399.247407913208,
+          "actual_start": "2024-12-31T09:00:00+00:00",
+          "actual_end": "2025-01-17T00:10:00+00:00"
+        },
+        {
+          "request_id": "DataCoordinator_AAPL_15min_1751633641337",
+          "symbol": "AAPL",
+          "data_type": "bars",
+          "timeframe": "15min",
+          "requested_start": "2025-01-15T07:12:00+00:00",
+          "requested_end": "2025-01-15T15:12:00+00:00",
+          "source": "polygon_api",
+          "success": true,
+          "returned_count": 25,
+          "processing_time_ms": 155.34496307373047,
+          "actual_start": "2025-01-15T09:00:00+00:00",
+          "actual_end": "2025-01-15T15:00:00+00:00"
+        },
+        {
+          "request_id": "DataCoordinator_AAPL_trades_1751633641492",
+          "symbol": "AAPL",
+          "data_type": "trades",
+          "timeframe": "tick",
+          "requested_start": "2025-01-15T12:55:30+00:00",
+          "requested_end": "2025-01-15T13:49:30+00:00",
+          "source": "polygon_api",
+          "success": true,
+          "returned_count": 7089,
+          "processing_time_ms": 703.0518054962158,
+          "actual_start": "2025-01-15T05:04:26.481783+00:00",
+          "actual_end": "2025-01-15T13:49:29.154934+00:00"
+        },
+        {
+          "request_id": "DataCoordinator_AAPL_quotes_1751633642195",
+          "symbol": "AAPL",
+          "data_type": "quotes",
+          "timeframe": "tick",
+          "requested_start": "2025-01-15T12:55:30+00:00",
+          "requested_end": "2025-01-15T13:49:30+00:00",
+          "source": "polygon_api",
+          "success": true,
+          "returned_count": 5071,
+          "processing_time_ms": 626.2104511260986,
+          "actual_start": "2025-01-15T12:55:43.795085031+00:00",
+          "actual_end": "2025-01-15T13:49:25.956917360+00:00"
+        }
+      ]
+    }
+  },
+  "all_requests": [
+    {
+      "request_id": "DataCoordinator_AAPL_1min_1751633640451",
+      "symbol": "AAPL",
+      "data_type": "bars",
+      "timeframe": "1min",
+      "requested_start": "2025-01-15T11:48:00+00:00",
+      "requested_end": "2025-01-15T14:48:00+00:00",
+      "source": "polygon_api",
+      "success": true,
+      "returned_count": 167,
+      "processing_time_ms": 486.5398406982422,
+      "actual_start": "2025-01-15T11:48:00+00:00",
+      "actual_end": "2025-01-15T14:48:00+00:00"
+    },
+    {
+      "request_id": "DataCoordinator_AAPL_5min_1751633640937",
+      "symbol": "AAPL",
+      "data_type": "bars",
+      "timeframe": "5min",
+      "requested_start": "2024-12-31T04:12:00+00:00",
+      "requested_end": "2025-01-17T00:12:00+00:00",
+      "source": "polygon_api",
+      "success": true,
+      "returned_count": 2074,
+      "processing_time_ms": 399.247407913208,
+      "actual_start": "2024-12-31T09:00:00+00:00",
+      "actual_end": "2025-01-17T00:10:00+00:00"
+    },
+    {
+      "request_id": "DataCoordinator_AAPL_15min_1751633641337",
+      "symbol": "AAPL",
+      "data_type": "bars",
+      "timeframe": "15min",
+      "requested_start": "2025-01-15T07:12:00+00:00",
+      "requested_end": "2025-01-15T15:12:00+00:00",
+      "source": "polygon_api",
+      "success": true,
+      "returned_count": 25,
+      "processing_time_ms": 155.34496307373047,
+      "actual_start": "2025-01-15T09:00:00+00:00",
+      "actual_end": "2025-01-15T15:00:00+00:00"
+    },
+    {
+      "request_id": "DataCoordinator_AAPL_trades_1751633641492",
+      "symbol": "AAPL",
+      "data_type": "trades",
+      "timeframe": "tick",
+      "requested_start": "2025-01-15T12:55:30+00:00",
+      "requested_end": "2025-01-15T13:49:30+00:00",
+      "source": "polygon_api",
+      "success": true,
+      "returned_count": 7089,
+      "processing_time_ms": 703.0518054962158,
+      "actual_start": "2025-01-15T05:04:26.481783+00:00",
+      "actual_end": "2025-01-15T13:49:29.154934+00:00"
+    },
+    {
+      "request_id": "DataCoordinator_AAPL_quotes_1751633642195",
+      "symbol": "AAPL",
+      "data_type": "quotes",
+      "timeframe": "tick",
+      "requested_start": "2025-01-15T12:55:30+00:00",
+      "requested_end": "2025-01-15T13:49:30+00:00",
+      "source": "polygon_api",
+      "success": true,
+      "returned_count": 5071,
+      "processing_time_ms": 626.2104511260986,
+      "actual_start": "2025-01-15T12:55:43.795085031+00:00",
+      "actual_end": "2025-01-15T13:49:25.956917360+00:00"
+    }
+  ]
+}

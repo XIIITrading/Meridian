@@ -1,0 +1,83 @@
+{
+  "report_timestamp": "2025-07-03T19:43:24.565779",
+  "session_stats": {
+    "total_requests": 2,
+    "successful_requests": 2,
+    "failed_requests": 0,
+    "api_calls": 2,
+    "cache_hits": 0,
+    "total_processing_time_ms": 1868.412733078003
+  },
+  "by_plugin": {
+    "Impact Success Test": {
+      "total_requests": 2,
+      "successful": 2,
+      "failed": 0,
+      "by_data_type": {
+        "bars": 0,
+        "trades": 1,
+        "quotes": 1
+      },
+      "requests": [
+        {
+          "request_id": "Impact Success Test_ORCL_trades_1751571788416",
+          "symbol": "ORCL",
+          "data_type": "trades",
+          "timeframe": "tick",
+          "requested_start": "2025-07-02T13:35:00+00:00",
+          "requested_end": "2025-07-02T14:05:00+00:00",
+          "source": "polygon_api",
+          "success": true,
+          "returned_count": 15614,
+          "processing_time_ms": 1117.8970336914062,
+          "actual_start": "2025-07-02T13:35:00.141336181+00:00",
+          "actual_end": "2025-07-02T14:04:59.749798252+00:00"
+        },
+        {
+          "request_id": "Impact Success Test_ORCL_quotes_1751571789534",
+          "symbol": "ORCL",
+          "data_type": "quotes",
+          "timeframe": "tick",
+          "requested_start": "2025-07-02T13:35:00+00:00",
+          "requested_end": "2025-07-02T14:05:00+00:00",
+          "source": "polygon_api",
+          "success": true,
+          "returned_count": 5087,
+          "processing_time_ms": 750.5156993865967,
+          "actual_start": "2025-07-02T13:35:00.141800168+00:00",
+          "actual_end": "2025-07-02T14:04:59.994986433+00:00"
+        }
+      ]
+    }
+  },
+  "all_requests": [
+    {
+      "request_id": "Impact Success Test_ORCL_trades_1751571788416",
+      "symbol": "ORCL",
+      "data_type": "trades",
+      "timeframe": "tick",
+      "requested_start": "2025-07-02T13:35:00+00:00",
+      "requested_end": "2025-07-02T14:05:00+00:00",
+      "source": "polygon_api",
+      "success": true,
+      "returned_count": 15614,
+      "processing_time_ms": 1117.8970336914062,
+      "actual_start": "2025-07-02T13:35:00.141336181+00:00",
+      "actual_end": "2025-07-02T14:04:59.749798252+00:00"
+    },
+    {
+      "request_id": "Impact Success Test_ORCL_quotes_1751571789534",
+      "symbol": "ORCL",
+      "data_type": "quotes",
+      "timeframe": "tick",
+      "requested_start": "2025-07-02T13:35:00+00:00",
+      "requested_end": "2025-07-02T14:05:00+00:00",
+      "source": "polygon_api",
+      "success": true,
+      "returned_count": 5087,
+      "processing_time_ms": 750.5156993865967,
+      "actual_start": "2025-07-02T13:35:00.141800168+00:00",
+      "actual_end": "2025-07-02T14:04:59.994986433+00:00"
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+================================================================================
+POLYGON DATA MANAGER REPORT
+================================================================================
+
+Generated: 2025-07-06 15:07:12.816680
+Report Location: C:\Users\codyc\XIIITrading_Systems\Sirius\backtest\temp
+
+SESSION OVERVIEW:
+----------------------------------------
+Total Requests: 2
+Successful: 2
+Failed: 0
+API Calls Made: 2
+Cache Hits: 0
+Cache Hit Rate: 0.0%
+Total Processing Time: 1664.5ms
+
+PLUGIN BREAKDOWN:
+----------------------------------------
+
+Large Orders Grid:
+  Total Requests: 2
+  Successful: 2
+  Failed: 0

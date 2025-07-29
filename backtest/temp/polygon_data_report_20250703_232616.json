@@ -1,0 +1,53 @@
+{
+  "report_timestamp": "2025-07-03T23:26:16.865296",
+  "session_stats": {
+    "total_requests": 1,
+    "successful_requests": 0,
+    "failed_requests": 1,
+    "api_calls": 1,
+    "cache_hits": 0,
+    "total_processing_time_ms": 1.0554790496826172
+  },
+  "by_plugin": {
+    "Order Blocks Grid Test": {
+      "total_requests": 1,
+      "successful": 0,
+      "failed": 1,
+      "by_data_type": {
+        "bars": 1,
+        "trades": 0,
+        "quotes": 0
+      },
+      "requests": [
+        {
+          "request_id": "Order Blocks Grid Test_AAPL_5min_1751585176861",
+          "symbol": "AAPL",
+          "data_type": "bars",
+          "timeframe": "5min",
+          "requested_start": "2025-07-02T12:35:00+00:00",
+          "requested_end": "2025-07-02T13:35:00+00:00",
+          "source": "polygon_api",
+          "success": false,
+          "returned_count": 0,
+          "processing_time_ms": 1.0554790496826172,
+          "error": "No data returned from Polygon"
+        }
+      ]
+    }
+  },
+  "all_requests": [
+    {
+      "request_id": "Order Blocks Grid Test_AAPL_5min_1751585176861",
+      "symbol": "AAPL",
+      "data_type": "bars",
+      "timeframe": "5min",
+      "requested_start": "2025-07-02T12:35:00+00:00",
+      "requested_end": "2025-07-02T13:35:00+00:00",
+      "source": "polygon_api",
+      "success": false,
+      "returned_count": 0,
+      "processing_time_ms": 1.0554790496826172,
+      "error": "No data returned from Polygon"
+    }
+  ]
+}

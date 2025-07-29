@@ -1,0 +1,42 @@
+# requirements.txt for Premarket Scanner HVN Analysis Tool
+
+# ===== Core Data Processing =====
+numpy                       # Numerical computing
+pandas                      # Data manipulation and analysis
+
+# ===== UI Framework =====
+PyQt6                       # Qt6 Python bindings for GUI
+pyqtgraph                   # Fast plotting library for PyQt
+
+# ===== Database Connectivity =====
+supabase                    # Supabase Python client
+postgrest                   # Dependency of supabase
+gotrue                      # Dependency of supabase
+realtime                    # Dependency of supabase
+storage3                    # Dependency of supabase
+psutil                      # Polygon Server
+
+# ===== Configuration =====
+python-dotenv               # Load environment variables from .env
+
+# ===== Market Data =====
+polygon-api-client          # Polygon.io API client for market data
+websocket-client            # For Polygon WebSocket feeds (if needed)
+requests                    # HTTP library (dependency)
+urllib3                     # HTTP library (dependency)
+
+#====Statistics====#
+scipy
+numba
+tabulate
+
+
+# ===== Additional Dependencies =====
+python-dateutil             # Better date handling
+pytz                        # Timezone support
+qasync                      # For async QT support
+
+#====Anthropic====#
+anthropic
+aiohttp
+python-dotenv

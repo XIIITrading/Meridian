@@ -1,0 +1,83 @@
+{
+  "report_timestamp": "2025-07-03T21:44:39.333046",
+  "session_stats": {
+    "total_requests": 2,
+    "successful_requests": 2,
+    "failed_requests": 0,
+    "api_calls": 2,
+    "cache_hits": 0,
+    "total_processing_time_ms": 2202.141761779785
+  },
+  "by_plugin": {
+    "Large Orders Grid Test": {
+      "total_requests": 2,
+      "successful": 2,
+      "failed": 0,
+      "by_data_type": {
+        "bars": 0,
+        "trades": 1,
+        "quotes": 1
+      },
+      "requests": [
+        {
+          "request_id": "Large Orders Grid Test_ORCL_trades_1751579036954",
+          "symbol": "ORCL",
+          "data_type": "trades",
+          "timeframe": "tick",
+          "requested_start": "2025-07-02T13:40:00+00:00",
+          "requested_end": "2025-07-02T14:10:00+00:00",
+          "source": "polygon_api",
+          "success": true,
+          "returned_count": 16784,
+          "processing_time_ms": 1428.9920330047607,
+          "actual_start": "2025-07-02T13:40:00.030098268+00:00",
+          "actual_end": "2025-07-02T14:09:59.592250+00:00"
+        },
+        {
+          "request_id": "Large Orders Grid Test_ORCL_quotes_1751579038383",
+          "symbol": "ORCL",
+          "data_type": "quotes",
+          "timeframe": "tick",
+          "requested_start": "2025-07-02T13:40:00+00:00",
+          "requested_end": "2025-07-02T14:10:00+00:00",
+          "source": "polygon_api",
+          "success": true,
+          "returned_count": 5843,
+          "processing_time_ms": 773.1497287750244,
+          "actual_start": "2025-07-02T13:40:00.960913+00:00",
+          "actual_end": "2025-07-02T14:09:59.995236953+00:00"
+        }
+      ]
+    }
+  },
+  "all_requests": [
+    {
+      "request_id": "Large Orders Grid Test_ORCL_trades_1751579036954",
+      "symbol": "ORCL",
+      "data_type": "trades",
+      "timeframe": "tick",
+      "requested_start": "2025-07-02T13:40:00+00:00",
+      "requested_end": "2025-07-02T14:10:00+00:00",
+      "source": "polygon_api",
+      "success": true,
+      "returned_count": 16784,
+      "processing_time_ms": 1428.9920330047607,
+      "actual_start": "2025-07-02T13:40:00.030098268+00:00",
+      "actual_end": "2025-07-02T14:09:59.592250+00:00"
+    },
+    {
+      "request_id": "Large Orders Grid Test_ORCL_quotes_1751579038383",
+      "symbol": "ORCL",
+      "data_type": "quotes",
+      "timeframe": "tick",
+      "requested_start": "2025-07-02T13:40:00+00:00",
+      "requested_end": "2025-07-02T14:10:00+00:00",
+      "source": "polygon_api",
+      "success": true,
+      "returned_count": 5843,
+      "processing_time_ms": 773.1497287750244,
+      "actual_start": "2025-07-02T13:40:00.960913+00:00",
+      "actual_end": "2025-07-02T14:09:59.995236953+00:00"
+    }
+  ]
+}

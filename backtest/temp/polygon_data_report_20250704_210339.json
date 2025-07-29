@@ -1,0 +1,167 @@
+{
+  "report_timestamp": "2025-07-04T21:03:39.968667",
+  "session_stats": {
+    "total_requests": 5,
+    "successful_requests": 5,
+    "failed_requests": 0,
+    "api_calls": 5,
+    "cache_hits": 0,
+    "total_processing_time_ms": 3287.320852279663
+  },
+  "by_plugin": {
+    "Unknown": {
+      "total_requests": 5,
+      "successful": 5,
+      "failed": 0,
+      "by_data_type": {
+        "bars": 3,
+        "trades": 1,
+        "quotes": 1
+      },
+      "requests": [
+        {
+          "request_id": "Unknown_CRCL_1min_1751663016669",
+          "symbol": "CRCL",
+          "data_type": "bars",
+          "timeframe": "1min",
+          "requested_start": "2025-06-27T06:53:00+00:00",
+          "requested_end": "2025-06-27T15:17:00+00:00",
+          "source": "polygon_api",
+          "success": true,
+          "returned_count": 395,
+          "processing_time_ms": 462.9690647125244,
+          "actual_start": "2025-06-27T08:00:00+00:00",
+          "actual_end": "2025-06-27T15:17:00+00:00"
+        },
+        {
+          "request_id": "Unknown_CRCL_5min_1751663017132",
+          "symbol": "CRCL",
+          "data_type": "bars",
+          "timeframe": "5min",
+          "requested_start": "2025-06-27T00:17:00+00:00",
+          "requested_end": "2025-06-27T15:53:00+00:00",
+          "source": "polygon_api",
+          "success": true,
+          "returned_count": 96,
+          "processing_time_ms": 147.10736274719238,
+          "actual_start": "2025-06-27T07:57:00+00:00",
+          "actual_end": "2025-06-27T15:52:00+00:00"
+        },
+        {
+          "request_id": "Unknown_CRCL_15min_1751663017279",
+          "symbol": "CRCL",
+          "data_type": "bars",
+          "timeframe": "15min",
+          "requested_start": "2025-06-27T04:35:00+00:00",
+          "requested_end": "2025-06-27T16:35:00+00:00",
+          "source": "polygon_api",
+          "success": true,
+          "returned_count": 36,
+          "processing_time_ms": 142.14563369750977,
+          "actual_start": "2025-06-27T07:50:00+00:00",
+          "actual_end": "2025-06-27T16:35:00+00:00"
+        },
+        {
+          "request_id": "Unknown_CRCL_trades_1751663017421",
+          "symbol": "CRCL",
+          "data_type": "trades",
+          "timeframe": "tick",
+          "requested_start": "2025-06-27T13:00:30+00:00",
+          "requested_end": "2025-06-27T13:54:30+00:00",
+          "source": "polygon_api",
+          "success": true,
+          "returned_count": 111792,
+          "processing_time_ms": 2130.739212036133,
+          "actual_start": "2025-06-27T13:00:30.450022490+00:00",
+          "actual_end": "2025-06-27T13:54:29.913853796+00:00"
+        },
+        {
+          "request_id": "Unknown_CRCL_quotes_1751663019552",
+          "symbol": "CRCL",
+          "data_type": "quotes",
+          "timeframe": "tick",
+          "requested_start": "2025-06-27T13:00:30+00:00",
+          "requested_end": "2025-06-27T13:54:30+00:00",
+          "source": "polygon_api",
+          "success": true,
+          "returned_count": 16431,
+          "processing_time_ms": 404.3595790863037,
+          "actual_start": "2025-06-27T13:00:31.823486668+00:00",
+          "actual_end": "2025-06-27T13:54:29.896813611+00:00"
+        }
+      ]
+    }
+  },
+  "all_requests": [
+    {
+      "request_id": "Unknown_CRCL_1min_1751663016669",
+      "symbol": "CRCL",
+      "data_type": "bars",
+      "timeframe": "1min",
+      "requested_start": "2025-06-27T06:53:00+00:00",
+      "requested_end": "2025-06-27T15:17:00+00:00",
+      "source": "polygon_api",
+      "success": true,
+      "returned_count": 395,
+      "processing_time_ms": 462.9690647125244,
+      "actual_start": "2025-06-27T08:00:00+00:00",
+      "actual_end": "2025-06-27T15:17:00+00:00"
+    },
+    {
+      "request_id": "Unknown_CRCL_5min_1751663017132",
+      "symbol": "CRCL",
+      "data_type": "bars",
+      "timeframe": "5min",
+      "requested_start": "2025-06-27T00:17:00+00:00",
+      "requested_end": "2025-06-27T15:53:00+00:00",
+      "source": "polygon_api",
+      "success": true,
+      "returned_count": 96,
+      "processing_time_ms": 147.10736274719238,
+      "actual_start": "2025-06-27T07:57:00+00:00",
+      "actual_end": "2025-06-27T15:52:00+00:00"
+    },
+    {
+      "request_id": "Unknown_CRCL_15min_1751663017279",
+      "symbol": "CRCL",
+      "data_type": "bars",
+      "timeframe": "15min",
+      "requested_start": "2025-06-27T04:35:00+00:00",
+      "requested_end": "2025-06-27T16:35:00+00:00",
+      "source": "polygon_api",
+      "success": true,
+      "returned_count": 36,
+      "processing_time_ms": 142.14563369750977,
+      "actual_start": "2025-06-27T07:50:00+00:00",
+      "actual_end": "2025-06-27T16:35:00+00:00"
+    },
+    {
+      "request_id": "Unknown_CRCL_trades_1751663017421",
+      "symbol": "CRCL",
+      "data_type": "trades",
+      "timeframe": "tick",
+      "requested_start": "2025-06-27T13:00:30+00:00",
+      "requested_end": "2025-06-27T13:54:30+00:00",
+      "source": "polygon_api",
+      "success": true,
+      "returned_count": 111792,
+      "processing_time_ms": 2130.739212036133,
+      "actual_start": "2025-06-27T13:00:30.450022490+00:00",
+      "actual_end": "2025-06-27T13:54:29.913853796+00:00"
+    },
+    {
+      "request_id": "Unknown_CRCL_quotes_1751663019552",
+      "symbol": "CRCL",
+      "data_type": "quotes",
+      "timeframe": "tick",
+      "requested_start": "2025-06-27T13:00:30+00:00",
+      "requested_end": "2025-06-27T13:54:30+00:00",
+      "source": "polygon_api",
+      "success": true,
+      "returned_count": 16431,
+      "processing_time_ms": 404.3595790863037,
+      "actual_start": "2025-06-27T13:00:31.823486668+00:00",
+      "actual_end": "2025-06-27T13:54:29.896813611+00:00"
+    }
+  ]
+}

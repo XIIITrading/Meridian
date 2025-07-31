@@ -232,6 +232,25 @@ class NotionToSupabasePush:
             return property_obj.get('checkbox', False)
         elif prop_type == 'multi_select' and property_obj.get('multi_select'):
             return ','.join([opt['name'] for opt in property_obj['multi_select']])
+        elif prop_type == 'formula':
+            # Handle formula fields
+            formula = property_obj.get('formula', {})
+            formula_type = formula.get('type')
+            
+            if formula_type == 'string':
+                return formula.get('string')
+            elif formula_type == 'number':
+                number_value = formula.get('number')
+                # Return as string if it's being used as an ID, otherwise as number
+                return str(number_value) if number_value is not None else None
+            elif formula_type == 'boolean':
+                return formula.get('boolean')
+            elif formula_type == 'date':
+                date_obj = formula.get('date')
+                return date_obj.get('start') if date_obj else None
+            else:
+                # For any other formula type, try to get the value
+                return formula.get(formula_type)
         
         return None
     

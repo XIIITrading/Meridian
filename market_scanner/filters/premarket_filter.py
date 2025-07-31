@@ -22,6 +22,11 @@ class PremarketFilter(BaseFilter):
                  weights: Optional[InterestScoreWeights] = None):
         """Initialize the pre-market filter."""
         self.criteria = criteria or FilterCriteria()
+        
+        # Use gap-optimized weights if gap filtering is enabled
+        if weights is None and self.criteria.min_gap_percent > 0:
+            weights = InterestScoreWeights.for_gap_scan()
+            
         self.scoring_engine = ScoringEngine(weights)
         
         logger.info("PremarketFilter initialized with criteria: %s", 
@@ -53,6 +58,19 @@ class PremarketFilter(BaseFilter):
             'atr_min': df['atr'] >= self.criteria.min_atr,
             'atr_percent': df['atr_percent'] >= self.criteria.min_atr_percent
         }
+        
+        # Add market cap filter if specified
+        if self.criteria.min_market_cap and 'market_cap' in df.columns:
+            filters['market_cap'] = df['market_cap'] >= self.criteria.min_market_cap
+        
+        # Add gap filter if specified
+        if self.criteria.min_gap_percent > 0 and 'gap_percent' in df.columns:
+            if self.criteria.gap_direction == 'up':
+                filters['gap_up'] = df['gap_percent'] >= self.criteria.min_gap_percent
+            elif self.criteria.gap_direction == 'down':
+                filters['gap_down'] = df['gap_percent'] <= -self.criteria.min_gap_percent
+            else:  # both
+                filters['gap_both'] = df['gap_percent'].abs() >= self.criteria.min_gap_percent
         
         # Combine all filters
         combined_filter = pd.Series(True, index=df.index)
@@ -86,7 +104,12 @@ class PremarketFilter(BaseFilter):
         
         # Check for required columns
         required_columns = ['ticker', 'price', 'avg_daily_volume', 
-                          'premarket_volume', 'dollar_volume', 'atr', 'atr_percent']
+                        'premarket_volume', 'dollar_volume', 'atr', 'atr_percent']
+        
+        # Add gap-specific columns if gap filtering is enabled
+        if self.criteria.min_gap_percent > 0:
+            required_columns.extend(['gap_percent', 'previous_close'])
+            
         missing_columns = set(required_columns) - set(df.columns)
         if missing_columns:
             errors.append(f"Missing columns: {missing_columns}")
@@ -101,11 +124,12 @@ class PremarketFilter(BaseFilter):
         if 'atr' in df.columns and (df['atr'] < 0).any():
             errors.append("Negative ATR values found")
         
-        # Check for missing values
-        if df.isnull().any().any():
-            null_counts = df.isnull().sum()
-            null_cols = null_counts[null_counts > 0]
-            errors.append(f"Missing values found: {null_cols.to_dict()}")
+        # Check for missing values ONLY in required columns
+        # Don't check optional columns like market_cap
+        for col in required_columns:
+            if col in df.columns and df[col].isnull().any():
+                null_count = df[col].isnull().sum()
+                errors.append(f"Missing values in required column '{col}': {null_count}")
         
         return len(errors) == 0, errors
     
@@ -129,6 +153,11 @@ class PremarketFilter(BaseFilter):
                 'top_ticker': filtered_data.iloc[0]['ticker'] if len(filtered_data) > 0 else None,
                 'top_score': f"{filtered_data.iloc[0]['interest_score']:.2f}" if len(filtered_data) > 0 else None
             })
+            
+            # Add gap-specific summary if applicable
+            if 'gap_percent' in filtered_data.columns:
+                summary['avg_gap_percent'] = f"{filtered_data['gap_percent'].mean():.2f}%"
+                summary['max_gap_percent'] = f"{filtered_data['gap_percent'].abs().max():.2f}%"
         
         return summary
     

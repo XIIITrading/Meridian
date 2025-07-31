@@ -2,13 +2,16 @@
 Ticker list management for various markets and indices.
 """
 from datetime import datetime, timedelta
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Set
 from enum import Enum
 import warnings
 import json
 from pathlib import Path
+import logging
 
 from ..config import config
+
+logger = logging.getLogger(__name__)
 
 class TickerList(Enum):
     """Available ticker lists."""
@@ -16,6 +19,7 @@ class TickerList(Enum):
     NASDAQ100 = "nasdaq100"
     RUSSELL2000 = "russell2000"
     DOW30 = "dow30"
+    ALL_US_EQUITIES = "all_us_equities"
 
 class TickerManager:
     """Manages ticker lists for various indices."""
@@ -24,6 +28,8 @@ class TickerManager:
         self.data_dir = config.BASE_DIR / "data" / "ticker_lists"
         self.data_dir.mkdir(exist_ok=True)
         self._ticker_data = self._load_ticker_data()
+        self._all_equities_cache = None
+        self._all_equities_cache_time = None
     
     def _load_ticker_data(self) -> Dict:
         """Load ticker data from file."""
@@ -41,8 +47,12 @@ class TickerManager:
                 }
             }
     
-    def get_tickers(self, ticker_list: TickerList, check_staleness: bool = True) -> List[str]:
+    def get_tickers(self, ticker_list: Optional[TickerList] = None, 
+                   check_staleness: bool = True) -> List[str]:
         """Get tickers for specified list."""
+        if ticker_list is None or ticker_list == TickerList.ALL_US_EQUITIES:
+            return self.get_all_us_equities()
+            
         list_name = ticker_list.value
         
         if list_name not in self._ticker_data:
@@ -54,6 +64,123 @@ class TickerManager:
             self._check_staleness(list_name, data['last_updated'])
         
         return data['tickers'].copy()
+    
+    def get_all_us_equities(self, 
+                           min_market_cap: Optional[float] = None,
+                           min_price: float = 1.0,
+                           cache_hours: int = 24) -> List[str]:
+        """
+        Fetch all active US equities from Polygon.
+        
+        Args:
+            min_market_cap: Minimum market cap filter
+            min_price: Minimum price filter
+            cache_hours: Hours to cache the ticker list
+        
+        Returns:
+            List of ticker symbols
+        """
+        # Check cache
+        if (self._all_equities_cache is not None and 
+            self._all_equities_cache_time is not None):
+            
+            time_since_cache = datetime.now() - self._all_equities_cache_time
+            if time_since_cache < timedelta(hours=cache_hours):
+                logger.info(f"Using cached all equities list ({len(self._all_equities_cache)} tickers)")
+                return self._all_equities_cache.copy()
+        
+        logger.info("Fetching all US equities from Polygon...")
+        
+        try:
+            from polygon import RESTClient
+            
+            client = RESTClient(config.POLYGON_API_KEY)
+            
+            all_tickers = []
+            
+            # Fetch tickers with pagination
+            # Filter for stocks only (not ETFs, funds, etc.)
+            params = {
+                'market': 'stocks',
+                'active': True,
+                'limit': 1000,
+                'order': 'asc',
+                'sort': 'ticker'
+            }
+            
+            next_url = None
+            page_count = 0
+            
+            while True:
+                if next_url:
+                    response = client._session.get(next_url)
+                    data = response.json()
+                else:
+                    response = client.list_tickers(**params)
+                    data = response.__dict__ if hasattr(response, '__dict__') else response
+                
+                if 'results' in data:
+                    for ticker_info in data['results']:
+                        # Filter criteria
+                        if ticker_info.get('type') != 'CS':  # Common Stock only
+                            continue
+                        
+                        if ticker_info.get('currency_name') != 'usd':
+                            continue
+                            
+                        # Add to list
+                        all_tickers.append(ticker_info['ticker'])
+                
+                page_count += 1
+                logger.debug(f"Fetched page {page_count}, total tickers: {len(all_tickers)}")
+                
+                # Check for next page
+                if 'next_url' in data and data['next_url']:
+                    next_url = data['next_url']
+                else:
+                    break
+                    
+                # Safety limit
+                if page_count > 20:
+                    logger.warning("Reached page limit, stopping ticker fetch")
+                    break
+            
+            # Cache the results
+            self._all_equities_cache = all_tickers
+            self._all_equities_cache_time = datetime.now()
+            
+            logger.info(f"Fetched {len(all_tickers)} US equity tickers")
+            
+            # Save to file for reference
+            cache_file = self.data_dir / "all_us_equities_cache.json"
+            with open(cache_file, 'w') as f:
+                json.dump({
+                    'timestamp': datetime.now().isoformat(),
+                    'count': len(all_tickers),
+                    'tickers': all_tickers
+                }, f, indent=2)
+            
+            return all_tickers
+            
+        except Exception as e:
+            logger.error(f"Failed to fetch all US equities: {e}")
+            
+            # Try to load from cache file as fallback
+            cache_file = self.data_dir / "all_us_equities_cache.json"
+            if cache_file.exists():
+                logger.info("Loading from cache file as fallback")
+                with open(cache_file, 'r') as f:
+                    data = json.load(f)
+                    return data['tickers']
+            
+            # Last resort - return major indices combined
+            logger.warning("Falling back to combined major indices")
+            combined = set()
+            for list_type in ['sp500', 'nasdaq100', 'russell2000']:
+                if list_type in self._ticker_data:
+                    combined.update(self._ticker_data[list_type]['tickers'])
+            
+            return sorted(list(combined))
     
     def update_tickers(self, ticker_list: TickerList, tickers: List[str]):
         """Update ticker list."""

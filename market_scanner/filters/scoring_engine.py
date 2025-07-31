@@ -17,14 +17,27 @@ class InterestScoreWeights:
     dollar_volume_score: float = 0.20
     premarket_volume_absolute: float = 0.10
     price_atr_bonus: float = 0.05
+    gap_magnitude: float = 0.0  # Default 0 for non-gap scans
     
     def validate(self):
         """Ensure weights sum to 1.0."""
         total = (self.premarket_volume_ratio + self.atr_percentage + 
                 self.dollar_volume_score + self.premarket_volume_absolute + 
-                self.price_atr_bonus)
+                self.price_atr_bonus + self.gap_magnitude)
         if not np.isclose(total, 1.0):
             raise ValueError(f"Weights must sum to 1.0, got {total}")
+    
+    @classmethod
+    def for_gap_scan(cls):
+        """Weights optimized for gap scanning."""
+        return cls(
+            premarket_volume_ratio=0.20,
+            atr_percentage=0.15,
+            dollar_volume_score=0.10,
+            premarket_volume_absolute=0.15,
+            price_atr_bonus=0.05,
+            gap_magnitude=0.35  # Significant weight on gap size
+        )
 
 class ScoringEngine:
     """Engine for calculating interest scores."""
@@ -62,13 +75,23 @@ class ScoringEngine:
         sweet_spot_mask = (df['atr_percent'] >= 2.0) & (df['atr_percent'] <= 5.0)
         df.loc[sweet_spot_mask, 'price_atr_bonus'] = 100.0
         
+        # 6. Gap Magnitude Score (if applicable)
+        df['gap_magnitude_score'] = 0.0
+        if 'gap_percent' in df.columns and self.weights.gap_magnitude > 0:
+            # Score based on absolute gap size, normalized to 0-100
+            # 3% gap = 60 score, 5% gap = 100 score
+            df['gap_magnitude_score'] = (
+                df['gap_percent'].abs() * 20
+            ).clip(upper=100)
+        
         # Calculate weighted composite score
         df['interest_score'] = (
             (df['pm_vol_ratio_score'] * self.weights.premarket_volume_ratio) +
             (df['atr_percent_score'] * self.weights.atr_percentage) +
             (df['dollar_vol_score'] * self.weights.dollar_volume_score) +
             (df['pm_vol_abs_score'] * self.weights.premarket_volume_absolute) +
-            (df['price_atr_bonus'] * self.weights.price_atr_bonus)
+            (df['price_atr_bonus'] * self.weights.price_atr_bonus) +
+            (df['gap_magnitude_score'] * self.weights.gap_magnitude)
         )
         
         # Round for display
@@ -98,39 +121,50 @@ class ScoringEngine:
     
     def explain_score(self, row: pd.Series) -> Dict[str, Dict[str, float]]:
         """Explain the interest score calculation for a single stock."""
-        explanation = {
-            'components': {
-                'PM Volume Ratio': {
-                    'raw_value': f"{row['premarket_volume'] / row['avg_daily_volume']:.2%}",
-                    'score': row['pm_vol_ratio_score'],
-                    'weight': self.weights.premarket_volume_ratio,
-                    'contribution': row['pm_vol_ratio_score'] * self.weights.premarket_volume_ratio
-                },
-                'ATR Percentage': {
-                    'raw_value': f"{row['atr_percent']:.2f}%",
-                    'score': row['atr_percent_score'],
-                    'weight': self.weights.atr_percentage,
-                    'contribution': row['atr_percent_score'] * self.weights.atr_percentage
-                },
-                'Dollar Volume': {
-                    'raw_value': f"${row['dollar_volume']:,.0f}",
-                    'score': row['dollar_vol_score'],
-                    'weight': self.weights.dollar_volume_score,
-                    'contribution': row['dollar_vol_score'] * self.weights.dollar_volume_score
-                },
-                'PM Volume Absolute': {
-                    'raw_value': f"{row['premarket_volume']:,.0f}",
-                    'score': row['pm_vol_abs_score'],
-                    'weight': self.weights.premarket_volume_absolute,
-                    'contribution': row['pm_vol_abs_score'] * self.weights.premarket_volume_absolute
-                },
-                'Price-ATR Bonus': {
-                    'raw_value': f"{'Yes' if row['price_atr_bonus'] > 0 else 'No'}",
-                    'score': row['price_atr_bonus'],
-                    'weight': self.weights.price_atr_bonus,
-                    'contribution': row['price_atr_bonus'] * self.weights.price_atr_bonus
-                }
+        components = {
+            'PM Volume Ratio': {
+                'raw_value': f"{row['premarket_volume'] / row['avg_daily_volume']:.2%}",
+                'score': row['pm_vol_ratio_score'],
+                'weight': self.weights.premarket_volume_ratio,
+                'contribution': row['pm_vol_ratio_score'] * self.weights.premarket_volume_ratio
             },
+            'ATR Percentage': {
+                'raw_value': f"{row['atr_percent']:.2f}%",
+                'score': row['atr_percent_score'],
+                'weight': self.weights.atr_percentage,
+                'contribution': row['atr_percent_score'] * self.weights.atr_percentage
+            },
+            'Dollar Volume': {
+                'raw_value': f"${row['dollar_volume']:,.0f}",
+                'score': row['dollar_vol_score'],
+                'weight': self.weights.dollar_volume_score,
+                'contribution': row['dollar_vol_score'] * self.weights.dollar_volume_score
+            },
+            'PM Volume Absolute': {
+                'raw_value': f"{row['premarket_volume']:,.0f}",
+                'score': row['pm_vol_abs_score'],
+                'weight': self.weights.premarket_volume_absolute,
+                'contribution': row['pm_vol_abs_score'] * self.weights.premarket_volume_absolute
+            },
+            'Price-ATR Bonus': {
+                'raw_value': f"{'Yes' if row['price_atr_bonus'] > 0 else 'No'}",
+                'score': row['price_atr_bonus'],
+                'weight': self.weights.price_atr_bonus,
+                'contribution': row['price_atr_bonus'] * self.weights.price_atr_bonus
+            }
+        }
+        
+        # Add gap component if applicable
+        if self.weights.gap_magnitude > 0 and 'gap_magnitude_score' in row:
+            components['Gap Magnitude'] = {
+                'raw_value': f"{row.get('gap_percent', 0):.2f}%",
+                'score': row['gap_magnitude_score'],
+                'weight': self.weights.gap_magnitude,
+                'contribution': row['gap_magnitude_score'] * self.weights.gap_magnitude
+            }
+        
+        explanation = {
+            'components': components,
             'total_score': row['interest_score']
         }
         

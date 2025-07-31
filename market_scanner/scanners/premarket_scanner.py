@@ -8,6 +8,8 @@ from datetime import datetime, timedelta, timezone, time
 from typing import Dict, List, Optional, Tuple
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import asyncio
+from asyncio import Semaphore
 
 from .base_scanner import BaseScanner
 from ..data import PolygonDataFetcher, TickerManager, TickerList
@@ -24,7 +26,7 @@ class PremarketScanner(BaseScanner):
     """
     
     def __init__(self,
-                 ticker_list: TickerList = TickerList.SP500,
+                 ticker_list: Optional[TickerList] = TickerList.SP500,
                  filter_criteria: Optional[FilterCriteria] = None,
                  score_weights: Optional[InterestScoreWeights] = None,
                  cache_enabled: bool = True,
@@ -35,7 +37,10 @@ class PremarketScanner(BaseScanner):
         self.data_fetcher = PolygonDataFetcher(cache_enabled=cache_enabled)
         self.ticker_manager = TickerManager()
         
-        # Filter components
+        # Filter components - use gap weights if gap criteria present
+        if filter_criteria and filter_criteria.min_gap_percent > 0 and score_weights is None:
+            score_weights = InterestScoreWeights.for_gap_scan()
+            
         self.filter = PremarketFilter(
             criteria=filter_criteria,
             weights=score_weights
@@ -46,7 +51,10 @@ class PremarketScanner(BaseScanner):
         
         # Load tickers
         self.tickers = self.ticker_manager.get_tickers(ticker_list)
-        logger.info(f"Loaded {len(self.tickers)} {ticker_list.value} tickers")
+        if ticker_list == TickerList.ALL_US_EQUITIES:
+            logger.info(f"Loaded {len(self.tickers)} US equity tickers")
+        else:
+            logger.info(f"Loaded {len(self.tickers)} {ticker_list.value if ticker_list else 'all'} tickers")
         
         # Cache for storing fetched data
         self.data_cache = {}
@@ -91,7 +99,7 @@ class PremarketScanner(BaseScanner):
         
         # Add scan metadata
         ranked_data['scan_time'] = scan_time
-        ranked_data['ticker_list'] = self.ticker_list.value
+        ranked_data['ticker_list'] = self.ticker_list.value if self.ticker_list else 'all_us_equities'
         
         logger.info(f"Scan complete: {len(ranked_data)} stocks passed filters")
         
@@ -182,13 +190,14 @@ class PremarketScanner(BaseScanner):
                 market_dates['history_end']
             )
             
-            if historical_df.empty:
+            if historical_df.empty or len(historical_df) < 2:
                 return None
             
             # Calculate metrics from historical data
             atr = self._calculate_atr(historical_df, period=14)
             avg_daily_volume = self._calculate_avg_volume(historical_df, period=20)
             current_price = historical_df['close'].iloc[-1]
+            previous_close = historical_df['close'].iloc[-2] if len(historical_df) > 1 else current_price
             
             # Skip if price outside range (early filter)
             if current_price < self.filter.criteria.min_price or \
@@ -196,25 +205,51 @@ class PremarketScanner(BaseScanner):
                 return None
             
             # Fetch pre-market data
-            premarket_volume = self._fetch_premarket_volume(
+            premarket_data = self._fetch_premarket_data(
                 ticker,
                 market_dates['premarket_start'],
                 market_dates['premarket_end']
             )
             
+            premarket_volume = premarket_data['volume']
+            premarket_price = premarket_data['price'] if premarket_data['price'] > 0 else current_price
+            
+            # Calculate gap percentage
+            gap_percent = ((premarket_price - previous_close) / previous_close * 100) if previous_close > 0 else 0
+            
+            # Early gap filter to save processing
+            if self.filter.criteria.min_gap_percent > 0:
+                if self.filter.criteria.gap_direction == 'up' and gap_percent < self.filter.criteria.min_gap_percent:
+                    return None
+                elif self.filter.criteria.gap_direction == 'down' and gap_percent > -self.filter.criteria.min_gap_percent:
+                    return None
+                elif self.filter.criteria.gap_direction == 'both' and abs(gap_percent) < self.filter.criteria.min_gap_percent:
+                    return None
+            
             # Calculate derived metrics
             dollar_volume = current_price * avg_daily_volume
             atr_percent = (atr / current_price) * 100 if current_price > 0 else 0
             
+            # Fetch market cap if filtering all equities
+            market_cap = None
+            if self.ticker_list == TickerList.ALL_US_EQUITIES:
+                market_cap = self._fetch_market_cap(ticker)
+                if market_cap and self.filter.criteria.min_market_cap:
+                    if market_cap < self.filter.criteria.min_market_cap:
+                        return None
+            
             # Return data dictionary
             return {
                 'ticker': ticker,
-                'price': current_price,
+                'price': premarket_price,
+                'previous_close': previous_close,
+                'gap_percent': gap_percent,
                 'avg_daily_volume': avg_daily_volume,
                 'premarket_volume': premarket_volume,
                 'dollar_volume': dollar_volume,
                 'atr': atr,
                 'atr_percent': atr_percent,
+                'market_cap': market_cap,
                 'fetch_time': scan_time
             }
             
@@ -222,11 +257,11 @@ class PremarketScanner(BaseScanner):
             logger.debug(f"Error fetching data for {ticker}: {e}")
             return None
     
-    def _fetch_premarket_volume(self,
-                               ticker: str,
-                               start_time: datetime,
-                               end_time: datetime) -> float:
-        """Fetch pre-market volume for a ticker."""
+    def _fetch_premarket_data(self,
+                             ticker: str,
+                             start_time: datetime,
+                             end_time: datetime) -> Dict[str, float]:
+        """Fetch pre-market volume and price for a ticker."""
         try:
             # Fetch 1-minute bars for pre-market session
             df = self.data_fetcher.fetch_intraday(
@@ -237,14 +272,33 @@ class PremarketScanner(BaseScanner):
             )
             
             if df.empty:
-                return 0.0
+                return {'volume': 0.0, 'price': 0.0}
             
-            # Sum volume for pre-market period
-            return float(df['volume'].sum())
+            # Sum volume and get last price
+            total_volume = float(df['volume'].sum())
+            last_price = float(df['close'].iloc[-1])
+            
+            return {'volume': total_volume, 'price': last_price}
             
         except Exception as e:
             logger.debug(f"Failed to fetch pre-market data for {ticker}: {e}")
-            return 0.0
+            return {'volume': 0.0, 'price': 0.0}
+    
+    def _fetch_market_cap(self, ticker: str) -> Optional[float]:
+        """Fetch market cap for a ticker."""
+        try:
+            from polygon import RESTClient
+            client = RESTClient(config.POLYGON_API_KEY)
+            
+            details = client.get_ticker_details(ticker)
+            if hasattr(details, 'market_cap'):
+                return float(details.market_cap)
+            
+            return None
+            
+        except Exception as e:
+            logger.debug(f"Failed to fetch market cap for {ticker}: {e}")
+            return None
     
     def _calculate_atr(self, df: pd.DataFrame, period: int = 14) -> float:
         """Calculate Average True Range (ATR)."""
@@ -276,7 +330,7 @@ class PremarketScanner(BaseScanner):
         """Generate summary statistics for scan results."""
         if scan_results.empty:
             return {
-                'ticker_list': self.ticker_list.value,
+                'ticker_list': self.ticker_list.value if self.ticker_list else 'all_us_equities',
                 'total_scanned': len(self.tickers),
                 'passed_filters': 0,
                 'pass_rate': '0.0%',
@@ -284,7 +338,7 @@ class PremarketScanner(BaseScanner):
             }
         
         summary = {
-            'ticker_list': self.ticker_list.value,
+            'ticker_list': self.ticker_list.value if self.ticker_list else 'all_us_equities',
             'total_scanned': len(self.tickers),
             'passed_filters': len(scan_results),
             'pass_rate': f"{(len(scan_results) / len(self.tickers) * 100):.1f}%",
@@ -294,6 +348,16 @@ class PremarketScanner(BaseScanner):
             'avg_premarket_volume': scan_results['premarket_volume'].mean(),
             'avg_atr_percent': scan_results['atr_percent'].mean()
         }
+        
+        # Add gap-specific stats if applicable
+        if 'gap_percent' in scan_results.columns and self.filter.criteria.min_gap_percent > 0:
+            summary['avg_gap_percent'] = f"{scan_results['gap_percent'].mean():.2f}%"
+            summary['max_gap_percent'] = f"{scan_results['gap_percent'].abs().max():.2f}%"
+            
+            # Count up vs down gaps
+            up_gaps = (scan_results['gap_percent'] > 0).sum()
+            down_gaps = (scan_results['gap_percent'] < 0).sum()
+            summary['gap_distribution'] = f"{up_gaps} up, {down_gaps} down"
         
         return summary
     
@@ -306,14 +370,42 @@ class PremarketScanner(BaseScanner):
             'atr', 'atr_percent', 'dollar_volume'
         ]
         
+        # Add gap columns if it's a gap scan
+        if 'gap_percent' in scan_results.columns and self.filter.criteria.min_gap_percent > 0:
+            # Insert gap_percent after price
+            idx = display_columns.index('price') + 1
+            display_columns.insert(idx, 'gap_percent')
+            display_columns.insert(idx + 1, 'previous_close')
+        
+        # Add market cap if available
+        if 'market_cap' in scan_results.columns and scan_results['market_cap'].notna().any():
+            display_columns.append('market_cap')
+        
+        # Select only available columns
+        available_columns = [col for col in display_columns if col in scan_results.columns]
+        formatted_df = scan_results[available_columns].copy()
+        
         # Format numeric columns
-        formatted_df = scan_results[display_columns].copy()
-        formatted_df['price'] = formatted_df['price'].apply(lambda x: f"${x:.2f}")
-        formatted_df['premarket_volume'] = formatted_df['premarket_volume'].apply(lambda x: f"{x:,.0f}")
-        formatted_df['avg_daily_volume'] = formatted_df['avg_daily_volume'].apply(lambda x: f"{x:,.0f}")
-        formatted_df['atr'] = formatted_df['atr'].apply(lambda x: f"${x:.2f}")
-        formatted_df['atr_percent'] = formatted_df['atr_percent'].apply(lambda x: f"{x:.2f}%")
-        formatted_df['dollar_volume'] = formatted_df['dollar_volume'].apply(lambda x: f"${x:,.0f}")
+        if 'price' in formatted_df.columns:
+            formatted_df['price'] = formatted_df['price'].apply(lambda x: f"${x:.2f}")
+        if 'previous_close' in formatted_df.columns:
+            formatted_df['previous_close'] = formatted_df['previous_close'].apply(lambda x: f"${x:.2f}")
+        if 'gap_percent' in formatted_df.columns:
+            formatted_df['gap_percent'] = formatted_df['gap_percent'].apply(lambda x: f"{x:+.2f}%")
+        if 'premarket_volume' in formatted_df.columns:
+            formatted_df['premarket_volume'] = formatted_df['premarket_volume'].apply(lambda x: f"{x:,.0f}")
+        if 'avg_daily_volume' in formatted_df.columns:
+            formatted_df['avg_daily_volume'] = formatted_df['avg_daily_volume'].apply(lambda x: f"{x:,.0f}")
+        if 'atr' in formatted_df.columns:
+            formatted_df['atr'] = formatted_df['atr'].apply(lambda x: f"${x:.2f}")
+        if 'atr_percent' in formatted_df.columns:
+            formatted_df['atr_percent'] = formatted_df['atr_percent'].apply(lambda x: f"{x:.2f}%")
+        if 'dollar_volume' in formatted_df.columns:
+            formatted_df['dollar_volume'] = formatted_df['dollar_volume'].apply(lambda x: f"${x:,.0f}")
+        if 'market_cap' in formatted_df.columns:
+            formatted_df['market_cap'] = formatted_df['market_cap'].apply(
+                lambda x: f"${x:,.0f}" if pd.notna(x) else "N/A"
+            )
         
         # Save to CSV
         formatted_df.to_csv(output_path, index=False)

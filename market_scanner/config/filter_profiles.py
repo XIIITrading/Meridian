@@ -72,6 +72,46 @@ class FilterProfiles:
         min_atr=0.10,
         min_atr_percent=3.0
     )
+    
+    # Gap scanning profiles
+    GAP_UP = FilterProfile(
+        name="gap_up",
+        description="Stocks gapping up 3% or more",
+        min_price=1.0,
+        max_price=1000.0,
+        min_avg_volume=500_000,
+        min_premarket_volume=10_000,
+        min_premarket_volume_ratio=0.001,
+        min_dollar_volume=500_000,
+        min_atr=0.10,
+        min_atr_percent=0.5
+    )
+    
+    GAP_DOWN = FilterProfile(
+        name="gap_down",
+        description="Stocks gapping down 3% or more",
+        min_price=1.0,
+        max_price=1000.0,
+        min_avg_volume=500_000,
+        min_premarket_volume=10_000,
+        min_premarket_volume_ratio=0.001,
+        min_dollar_volume=500_000,
+        min_atr=0.10,
+        min_atr_percent=0.5
+    )
+    
+    LARGE_GAP = FilterProfile(
+        name="large_gap",
+        description="Stocks with large gaps (5%+)",
+        min_price=2.0,
+        max_price=500.0,
+        min_avg_volume=1_000_000,
+        min_premarket_volume=50_000,
+        min_premarket_volume_ratio=0.01,
+        min_dollar_volume=2_000_000,
+        min_atr=0.20,
+        min_atr_percent=1.0
+    )
 
 def get_filter_profile(name: str) -> FilterProfile:
     """Get filter profile by name."""
@@ -79,7 +119,10 @@ def get_filter_profile(name: str) -> FilterProfile:
         'strict': FilterProfiles.STRICT,
         'relaxed': FilterProfiles.RELAXED,
         'momentum': FilterProfiles.MOMENTUM,
-        'penny_stocks': FilterProfiles.PENNY_STOCKS
+        'penny_stocks': FilterProfiles.PENNY_STOCKS,
+        'gap_up': FilterProfiles.GAP_UP,
+        'gap_down': FilterProfiles.GAP_DOWN,
+        'large_gap': FilterProfiles.LARGE_GAP
     }
     
     if name not in profiles:

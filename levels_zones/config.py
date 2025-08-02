@@ -1,75 +1,66 @@
 """
 Configuration management for Meridian Trading System
-Handles all environment variables and application settings
 """
 
 import os
-import sys
 from pathlib import Path
 from dotenv import load_dotenv
-from typing import Optional
-
-# Get the project root directory
-PROJECT_ROOT = Path(__file__).parent
-SRC_DIR = PROJECT_ROOT / "src"
-
-# Add src to Python path for imports
-sys.path.insert(0, str(SRC_DIR))
+import logging
 
 # Load environment variables
-env_path = PROJECT_ROOT / ".env"
-load_dotenv(env_path)
+load_dotenv()
 
-class Config:
-    """Central configuration class"""
+# Base paths
+BASE_DIR = Path(__file__).parent.parent
+DATA_DIR = BASE_DIR / "data"
+LOGS_DIR = BASE_DIR / "logs"
+
+# Create directories if they don't exist
+DATA_DIR.mkdir(exist_ok=True)
+LOGS_DIR.mkdir(exist_ok=True)
+
+# Supabase Configuration
+SUPABASE_URL = os.getenv("SUPABASE_URL", "")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY", "")
+
+# Polygon.io Configuration (for future use)
+POLYGON_API_KEY = os.getenv("POLYGON_API_KEY", "")
+
+# Application Settings
+APP_NAME = "Meridian Trading System"
+APP_VERSION = "1.0.0"
+DEBUG_MODE = os.getenv("DEBUG", "False").lower() == "true"
+
+# Logging Configuration
+LOG_LEVEL = logging.DEBUG if DEBUG_MODE else logging.INFO
+LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+
+# Trading Settings
+MAX_PRICE_LEVELS = 6  # 3 above, 3 below
+DEFAULT_ATR_PERIOD = 14
+
+# Validate required settings
+def validate_config():
+    """Validate that required configuration is present"""
+    errors = []
     
-    # API Configuration
-    SUPABASE_URL: str = os.getenv('SUPABASE_URL', '')
-    SUPABASE_KEY: str = os.getenv('SUPABASE_KEY', '')
-    POLYGON_API_KEY: str = os.getenv('POLYGON_API_KEY', '')
+    if not SUPABASE_URL:
+        errors.append("SUPABASE_URL not set in environment")
+    if not SUPABASE_KEY:
+        errors.append("SUPABASE_KEY not set in environment")
     
-    # Application Settings
-    APP_NAME: str = "Meridian Pre-Market Trading System"
-    APP_VERSION: str = "1.0.0"
-    DEBUG_MODE: bool = os.getenv('DEBUG_MODE', 'False').lower() == 'true'
-    LOG_LEVEL: str = os.getenv('LOG_LEVEL', 'INFO')
-    
-    # Trading Parameters
-    DEFAULT_ATR_PERIOD: int = 14
-    HVN_PERCENTILE_THRESHOLD: int = 80
-    MAX_PRICE_LEVELS: int = 6  # 3 above, 3 below
-    
-    # UI Configuration
-    WINDOW_WIDTH: int = 1400
-    WINDOW_HEIGHT: int = 900
-    THEME: str = 'Fusion'
-    
-    # Data Settings
-    DECIMAL_PLACES: int = 2
-    CACHE_EXPIRY_MINUTES: int = 5
-    
-    @classmethod
-    def validate(cls) -> bool:
-        """Validate required configuration"""
-        missing = []
-        
-        if not cls.SUPABASE_URL:
-            missing.append("SUPABASE_URL")
-        if not cls.SUPABASE_KEY:
-            missing.append("SUPABASE_KEY")
-        if not cls.POLYGON_API_KEY:
-            missing.append("POLYGON_API_KEY")
-            
-        if missing:
-            print(f"Missing configuration: {', '.join(missing)}")
-            print("Please check your .env file")
-            return False
-            
-        return True
-    
-    @classmethod
-    def get_data_dir(cls) -> Path:
-        """Get data directory path"""
-        data_dir = PROJECT_ROOT / "data"
-        data_dir.mkdir(exist_ok=True)
-        return data_dir
+    if errors:
+        for error in errors:
+            logging.error(error)
+        return False
+    return True
+
+# Initialize logging
+logging.basicConfig(
+    level=LOG_LEVEL,
+    format=LOG_FORMAT,
+    handlers=[
+        logging.FileHandler(LOGS_DIR / "meridian.log"),
+        logging.StreamHandler()
+    ]
+)

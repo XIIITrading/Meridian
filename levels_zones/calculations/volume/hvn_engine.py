@@ -1,4 +1,3 @@
-# market_review/calculations/volume/hvn_engine.py
 """
 Module: HVN (High Volume Node) Peak Detection Engine
 Purpose: Identify volume peaks in price profiles across multiple timeframes
@@ -18,7 +17,7 @@ import pandas as pd
 from scipy.signal import find_peaks
 
 # Local application imports
-from market_review.calculations.volume.volume_profile import VolumeProfile, PriceLevel
+from .volume_profile import VolumeProfile, PriceLevel
 
 
 @dataclass

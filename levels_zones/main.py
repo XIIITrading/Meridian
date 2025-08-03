@@ -4,12 +4,16 @@ Main application entry point with dark theme
 """
 
 import sys
+import os
 import logging
+from pathlib import Path
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtCore import Qt
 
-# Add src to path for imports
-sys.path.append('src')
+# Add both src and root to path for imports
+project_root = Path(__file__).parent
+sys.path.insert(0, str(project_root))
+sys.path.insert(0, str(project_root / 'src'))
 
 from config import Config
 from ui.main_window import MainWindow

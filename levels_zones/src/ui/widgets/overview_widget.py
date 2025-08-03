@@ -21,9 +21,6 @@ from PyQt6.QtGui import QFont, QColor
 # Import dark theme
 from ..dark_theme import DarkTheme, DarkStyleSheets
 
-# Import Polygon service
-from services.polygon_service import PolygonService
-
 logger = logging.getLogger(__name__)
 
 
@@ -68,6 +65,9 @@ class TrendSelector(QComboBox):
 class SessionInfoFrame(QFrame):
     """Frame for session information (ticker, datetime, etc.)"""
     
+    # Add signal for ticker changes
+    ticker_changed = pyqtSignal(str)
+    
     def __init__(self):
         super().__init__()
         self.setFrameStyle(QFrame.Shape.Box)
@@ -85,6 +85,8 @@ class SessionInfoFrame(QFrame):
         self.ticker_input.setMaxLength(10)
         self.ticker_input.setStyleSheet(DarkStyleSheets.INPUT_FIELD)
         self.ticker_input.setPlaceholderText("Enter ticker...")
+        # Connect signal AFTER creating the widget
+        self.ticker_input.textChanged.connect(self._on_ticker_text_changed)
         layout.addWidget(self.ticker_input)
         
         # Live Toggle
@@ -118,6 +120,10 @@ class SessionInfoFrame(QFrame):
         layout.addWidget(self.run_analysis_btn)
         
         self.setLayout(layout)
+    
+    def _on_ticker_text_changed(self, text: str):
+        """Handle ticker text changes"""
+        self.ticker_changed.emit(text)
 
 
 class SectionHeader(QLabel):
@@ -595,18 +601,13 @@ class OverviewWidget(QWidget):
     save_to_database = pyqtSignal(dict)  # Save session data to Supabase
     analysis_requested = pyqtSignal(dict)  # Session data for analysis
     data_changed = pyqtSignal()
+    fetch_market_data = pyqtSignal(dict)  # Request market data fetch
     
     def __init__(self):
         super().__init__()
         self.setStyleSheet(DarkStyleSheets.WIDGET_CONTAINER)
-        
-        # Initialize Polygon service
-        self.polygon_service = PolygonService()
-        self.polygon_service.metrics_updated.connect(self._on_metrics_updated)
-        self.polygon_service.connection_status.connect(self._on_connection_status)
-        
         self._init_ui()
-        self._connect_polygon_signals()
+        self._connect_signals()
     
     def _init_ui(self):
         """Initialize the UI following the wireframe layout"""
@@ -627,6 +628,7 @@ class OverviewWidget(QWidget):
         # Top section: Ticker entry, Live toggle, DateTime, Run Analysis
         self.session_info = SessionInfoFrame()
         self.session_info.run_analysis_btn.clicked.connect(self._on_run_analysis)
+        self.session_info.fetch_data_btn.clicked.connect(self._fetch_market_data)
         container_layout.addWidget(self.session_info)
         
         # Weekly Analysis Section
@@ -731,16 +733,31 @@ class OverviewWidget(QWidget):
         main_layout.addWidget(scroll_area)
         self.setLayout(main_layout)
     
-    def _connect_polygon_signals(self):
-        """Connect Polygon service signals"""
-        # Connect fetch button
-        self.session_info.fetch_data_btn.clicked.connect(self._fetch_market_data)
+    def _connect_signals(self):
+        """Connect internal signals"""
+        # Connect ticker changes
+        self.session_info.ticker_changed.connect(self._on_ticker_changed)
         
-        # Auto-fetch when ticker is entered and loses focus
-        self.session_info.ticker_input.editingFinished.connect(self._on_ticker_changed)
+        # Connect data changes from all input widgets
+        self.weekly_frame.trend_direction.currentTextChanged.connect(lambda: self.data_changed.emit())
+        self.weekly_frame.internal_trend.currentTextChanged.connect(lambda: self.data_changed.emit())
+        self.weekly_frame.position_structure.valueChanged.connect(lambda: self.data_changed.emit())
+        self.weekly_frame.eow_bias.currentTextChanged.connect(lambda: self.data_changed.emit())
+        self.weekly_frame.notes.textChanged.connect(lambda: self.data_changed.emit())
         
-        # Connect datetime changes for potential re-fetch
-        self.session_info.datetime_input.dateTimeChanged.connect(self._on_datetime_changed)
+        self.daily_frame.trend_direction.currentTextChanged.connect(lambda: self.data_changed.emit())
+        self.daily_frame.internal_trend.currentTextChanged.connect(lambda: self.data_changed.emit())
+        self.daily_frame.position_structure.valueChanged.connect(lambda: self.data_changed.emit())
+        self.daily_frame.eod_bias.currentTextChanged.connect(lambda: self.data_changed.emit())
+        self.daily_frame.notes.textChanged.connect(lambda: self.data_changed.emit())
+        
+        for level in self.daily_frame.above_levels + self.daily_frame.below_levels:
+            level.valueChanged.connect(lambda: self.data_changed.emit())
+    
+    def _on_ticker_changed(self, ticker: str):
+        """Handle ticker changes"""
+        if len(ticker.strip()) >= 1:
+            self.data_changed.emit()
     
     @pyqtSlot()
     def _fetch_market_data(self):
@@ -750,61 +767,13 @@ class OverviewWidget(QWidget):
             QMessageBox.warning(self, "Missing Ticker", "Please enter a ticker symbol.")
             return
         
-        session_datetime = self.session_info.datetime_input.dateTime().toPyDateTime()
+        datetime_val = self.session_info.datetime_input.dateTime().toPyDateTime()
         
-        # Update status
-        self.session_info.fetch_data_btn.setEnabled(False)
-        self.session_info.fetch_data_btn.setText("Fetching...")
-        
-        # Update status bar if available
-        if hasattr(self.parent(), 'statusBar'):
-            self.parent().statusBar().showMessage(f"Fetching market data for {ticker}...")
-        
-        # Fetch data
-        self.polygon_service.fetch_session_data(ticker, session_datetime)
-    
-    @pyqtSlot()
-    def _on_ticker_changed(self):
-        """Handle ticker change - only fetch if we have a valid ticker"""
-        ticker = self.session_info.ticker_input.text().strip()
-        if ticker and len(ticker) >= 1:  # Only auto-fetch if ticker is entered
-            self._fetch_market_data()
-    
-    @pyqtSlot()
-    def _on_datetime_changed(self):
-        """Handle datetime change - only fetch if we have a ticker"""
-        ticker = self.session_info.ticker_input.text().strip()
-        if ticker:
-            # Optional: Only fetch if datetime changed significantly
-            # For now, we'll let the user manually fetch after datetime changes
-            pass
-    
-    @pyqtSlot(dict)
-    def _on_metrics_updated(self, metrics: dict):
-        """Handle metrics update from Polygon service"""
-        self.metrics_frame.update_metrics(metrics)
-        
-        # Re-enable button
-        self.session_info.fetch_data_btn.setEnabled(True)
-        self.session_info.fetch_data_btn.setText("Fetch Market Data")
-        
-        # Update status bar if available
-        if hasattr(self.parent(), 'statusBar'):
-            self.parent().statusBar().showMessage("Market data fetched successfully", 5000)
-        
-        # Emit data changed signal
-        self.data_changed.emit()
-    
-    @pyqtSlot(bool, str)
-    def _on_connection_status(self, connected: bool, message: str):
-        """Handle connection status from Polygon service"""
-        if not connected:
-            QMessageBox.warning(
-                self, 
-                "Polygon Connection", 
-                f"Unable to connect to Polygon REST API:\n{message}\n\n"
-                "Please ensure the Polygon server is running at http://localhost:8000"
-            )
+        # Emit signal to fetch market data
+        self.fetch_market_data.emit({
+            'ticker': ticker.upper(),
+            'datetime': datetime_val
+        })
     
     @pyqtSlot()
     def _on_run_analysis(self):
@@ -840,6 +809,15 @@ class OverviewWidget(QWidget):
     
     def collect_session_data(self) -> Dict[str, Any]:
         """Collect all session data from the widget"""
+        # Get current price from metrics if available
+        current_price_text = self.metrics_frame.current_price.text()
+        pre_market_price = 0
+        if current_price_text:
+            try:
+                pre_market_price = float(current_price_text)
+            except ValueError:
+                pass
+        
         return {
             'ticker': self.session_info.ticker_input.text().strip().upper(),
             'is_live': self.session_info.live_toggle.isChecked(),
@@ -847,11 +825,15 @@ class OverviewWidget(QWidget):
             'weekly': self.weekly_frame.get_data(),
             'daily': self.daily_frame.get_data(),
             'zones': self.zone_table.get_zone_data(),
+            'pre_market_price': pre_market_price,
             'timestamp': datetime.now()
         }
     
     def load_session_data(self, session_data: Dict[str, Any]):
         """Load session data into the UI"""
+        # Clear existing data first
+        self.clear_all()
+        
         # Load ticker and datetime
         if 'ticker' in session_data:
             self.session_info.ticker_input.setText(session_data['ticker'])
@@ -863,7 +845,7 @@ class OverviewWidget(QWidget):
             dt = session_data['datetime']
             if isinstance(dt, str):
                 dt = datetime.fromisoformat(dt)
-            self.session_info.datetime_input.setDateTime(QDateTime(dt))
+            self.session_info.datetime_input.setDateTime(QDateTime.fromPyDateTime(dt))
         
         # Load weekly data
         if 'weekly' in session_data and session_data['weekly']:
@@ -927,7 +909,7 @@ class OverviewWidget(QWidget):
                 if 'low' in zone:
                     self.zone_table.item(row, 4).setText(str(zone['low']))
         
-        # After loading, fetch market data
+        # After loading, fetch market data if we have a ticker
         if 'ticker' in session_data:
             self._fetch_market_data()
     

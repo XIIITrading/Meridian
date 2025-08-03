@@ -10,7 +10,6 @@ from decimal import Decimal
 import pandas as pd
 import numpy as np
 from PyQt6.QtCore import QObject, pyqtSignal, QThread
-import pytz
 
 from data.polygon_bridge import PolygonBridge
 from calculations.volume.hvn_engine import HVNEngine, TimeframeResult
@@ -55,13 +54,11 @@ class PolygonDataWorker(QThread):
         
         self.progress.emit(10, f"Fetching data for {ticker}...")
         
-        # Determine if we need pre-market or regular hours data
-        eastern = pytz.timezone('US/Eastern')
-        et_time = session_datetime.astimezone(eastern).time()
-        
-        # Market hours: 9:30 AM - 4:00 PM ET
-        market_open = time(9, 30)
-        is_pre_market = et_time < market_open
+        # Everything is in UTC - no timezone conversions needed
+        # Market hours in UTC: 14:30 - 21:00 (9:30 AM - 4:00 PM ET)
+        market_open_utc = time(14, 30)  # 9:30 AM ET in UTC
+        session_time = session_datetime.time()
+        is_pre_market = session_time < market_open_utc
         
         # Calculate date ranges
         session_date = session_datetime.date()
@@ -87,6 +84,10 @@ class PolygonDataWorker(QThread):
             )
             
             if not data_5min.empty:
+                # Strip timezone info if present to work in naive UTC
+                if data_5min.index.tz is not None:
+                    data_5min.index = data_5min.index.tz_localize(None)
+                
                 # Calculate ATRs
                 self.progress.emit(40, "Calculating ATR values...")
                 
@@ -95,12 +96,12 @@ class PolygonDataWorker(QThread):
                 results['metrics']['atr_5min'] = float(atr_5min)
                 
                 # 10-minute ATR (resample and calculate)
-                data_10min = self._resample_data(data_5min, '10T')
+                data_10min = self._resample_data(data_5min, '10min')
                 atr_10min = self._calculate_atr(data_10min, period=14)
                 results['metrics']['atr_10min'] = float(atr_10min)
                 
                 # 15-minute ATR (resample and calculate)
-                data_15min = self._resample_data(data_5min, '15T')
+                data_15min = self._resample_data(data_5min, '15min')
                 atr_15min = self._calculate_atr(data_15min, period=14)
                 results['metrics']['atr_15min'] = float(atr_15min)
                 
@@ -128,6 +129,10 @@ class PolygonDataWorker(QThread):
             )
             
             if not data_daily.empty:
+                # Strip timezone info if present
+                if data_daily.index.tz is not None:
+                    data_daily.index = data_daily.index.tz_localize(None)
+                
                 # Calculate daily ATR (14 periods)
                 daily_atr = self._calculate_atr(data_daily, period=14)
                 results['metrics']['daily_atr'] = float(daily_atr)
@@ -173,6 +178,10 @@ class PolygonDataWorker(QThread):
             
             if data.empty:
                 raise ValueError(f"No data returned for {ticker}")
+            
+            # Strip timezone info if present
+            if data.index.tz is not None:
+                data.index = data.index.tz_localize(None)
             
             # Run HVN analysis for each timeframe
             results = {
@@ -273,7 +282,7 @@ class PolygonDataWorker(QThread):
     
     def _get_price_at_datetime(self, data: pd.DataFrame, target_datetime: datetime) -> float:
         """Get price at specific datetime"""
-        # Find the closest bar to target datetime
+        # Simple comparison - everything is in UTC
         if target_datetime in data.index:
             return float(data.loc[target_datetime, 'close'])
         
@@ -290,13 +299,11 @@ class PolygonDataWorker(QThread):
         if session_data.empty:
             return 0.0
         
-        # Find first bar after 9:30 AM ET
-        eastern = pytz.timezone('US/Eastern')
-        market_open = time(9, 30)
+        # Find first bar after 14:30 UTC (9:30 AM ET)
+        market_open_utc = time(14, 30)
         
         for idx, row in session_data.iterrows():
-            et_time = idx.astimezone(eastern).time()
-            if et_time >= market_open:
+            if idx.time() >= market_open_utc:
                 return float(row['open'])
         
         # If no regular hours data, return first available
@@ -328,7 +335,7 @@ class PolygonService(QObject):
         
         Args:
             ticker: Stock ticker
-            session_datetime: Analysis datetime
+            session_datetime: Analysis datetime (in UTC)
         """
         if self.worker and self.worker.isRunning():
             logger.warning("Previous operation still running")
@@ -359,7 +366,7 @@ class PolygonService(QObject):
         
         Args:
             ticker: Stock ticker
-            session_datetime: Analysis datetime
+            session_datetime: Analysis datetime (in UTC)
         """
         if self.worker and self.worker.isRunning():
             logger.warning("Previous operation still running")

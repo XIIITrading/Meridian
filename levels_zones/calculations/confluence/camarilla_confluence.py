@@ -10,7 +10,7 @@ from typing import Dict, List, Tuple, Optional, Set
 from datetime import datetime
 import numpy as np
 
-from market_review.calculations.pivots.camarilla_engine import CamarillaResult, CamarillaPivot
+from calculations.pivots.camarilla_engine import CamarillaResult, CamarillaPivot
 
 
 @dataclass

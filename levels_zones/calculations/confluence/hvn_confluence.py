@@ -11,7 +11,7 @@ from typing import Dict, List, Tuple, Optional
 from datetime import datetime
 import numpy as np
 
-from market_review.calculations.volume.hvn_engine import TimeframeResult
+from calculations.volume.hvn_engine import TimeframeResult
 
 
 @dataclass

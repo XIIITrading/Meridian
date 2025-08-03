@@ -174,6 +174,50 @@ class PolygonBridge:
         except Exception as e:
             logger.error(f"Error fetching bars for {symbol}: {e}")
             return None
+        
+    def get_historical_bars(self, 
+                       ticker: str,
+                       start_date: date,
+                       end_date: date,
+                       timeframe: str = '5min') -> pd.DataFrame:
+        """
+        Fetch historical bars from Polygon REST API.
+        Compatibility method that maps to fetch_bars.
+        
+        Args:
+            ticker: Stock symbol
+            start_date: Start date (date object)
+            end_date: End date (date object)
+            timeframe: Bar timeframe ('5min', 'day', etc.)
+            
+        Returns:
+            DataFrame with OHLCV data
+        """
+        # Convert date objects to strings
+        start_str = start_date.strftime('%Y-%m-%d') if isinstance(start_date, date) else start_date
+        end_str = end_date.strftime('%Y-%m-%d') if isinstance(end_date, date) else end_date
+        
+        # Map timeframe format if needed
+        timeframe_map = {
+            '5min': '5min',
+            '10min': '10min', 
+            '15min': '15min',
+            'day': '1day',
+            '1day': '1day'
+        }
+        
+        mapped_timeframe = timeframe_map.get(timeframe, timeframe)
+        
+        # Call the existing fetch_bars method
+        result = self.fetch_bars(
+            symbol=ticker,
+            start_date=start_str,
+            end_date=end_str,
+            timeframe=mapped_timeframe
+        )
+        
+        # Return empty DataFrame if None
+        return result if result is not None else pd.DataFrame()
     
     def get_latest_price(self, symbol: str) -> Optional[Decimal]:
         """

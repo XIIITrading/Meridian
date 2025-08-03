@@ -27,10 +27,10 @@ from ui.dialogs.session_picker_dialog import SessionPickerDialog
 from ui.threads.analysis_thread import AnalysisThread
 
 # Import the mixin classes
-from ui.main_window.menu_manager import MenuManagerMixin
-from ui.main_window.signal_handlers import SignalHandlersMixin
-from ui.main_window.database_handlers import DatabaseHandlersMixin
-from ui.main_window.window_helpers import WindowHelpersMixin
+from .main_window.menu_manager import MenuManagerMixin
+from .main_window.signal_handlers import SignalHandlersMixin
+from .main_window.database_handlers import DatabaseHandlersMixin
+from .main_window.window_helpers import WindowHelpersMixin
 
 # Set up logging
 logger = logging.getLogger(__name__)

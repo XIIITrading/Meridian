@@ -16,7 +16,7 @@ sys.path.insert(0, str(project_root))
 sys.path.insert(0, str(project_root / 'src'))
 
 from config import Config
-from ui.main_window import MainWindow
+from ui import MainWindow
 from ui.dark_theme import apply_dark_theme
 
 # Configure logging

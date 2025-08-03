@@ -21,6 +21,9 @@ from PyQt6.QtGui import QFont, QColor
 # Import dark theme
 from ..dark_theme import DarkTheme, DarkStyleSheets
 
+# Import Polygon service
+from services.polygon_service import PolygonService
+
 logger = logging.getLogger(__name__)
 
 
@@ -98,6 +101,12 @@ class SessionInfoFrame(QFrame):
         self.datetime_input.setDisplayFormat("yyyy-MM-dd HH:mm:ss")
         self.datetime_input.setStyleSheet(DarkStyleSheets.INPUT_FIELD)
         layout.addWidget(self.datetime_input)
+        
+        # Fetch Market Data Button
+        self.fetch_data_btn = QPushButton("Fetch Market Data")
+        self.fetch_data_btn.setStyleSheet(DarkStyleSheets.BUTTON_SECONDARY)
+        self.fetch_data_btn.setMinimumWidth(140)
+        layout.addWidget(self.fetch_data_btn)
         
         # Spacer
         layout.addStretch()
@@ -590,7 +599,14 @@ class OverviewWidget(QWidget):
     def __init__(self):
         super().__init__()
         self.setStyleSheet(DarkStyleSheets.WIDGET_CONTAINER)
+        
+        # Initialize Polygon service
+        self.polygon_service = PolygonService()
+        self.polygon_service.metrics_updated.connect(self._on_metrics_updated)
+        self.polygon_service.connection_status.connect(self._on_connection_status)
+        
         self._init_ui()
+        self._connect_polygon_signals()
     
     def _init_ui(self):
         """Initialize the UI following the wireframe layout"""
@@ -715,6 +731,81 @@ class OverviewWidget(QWidget):
         main_layout.addWidget(scroll_area)
         self.setLayout(main_layout)
     
+    def _connect_polygon_signals(self):
+        """Connect Polygon service signals"""
+        # Connect fetch button
+        self.session_info.fetch_data_btn.clicked.connect(self._fetch_market_data)
+        
+        # Auto-fetch when ticker is entered and loses focus
+        self.session_info.ticker_input.editingFinished.connect(self._on_ticker_changed)
+        
+        # Connect datetime changes for potential re-fetch
+        self.session_info.datetime_input.dateTimeChanged.connect(self._on_datetime_changed)
+    
+    @pyqtSlot()
+    def _fetch_market_data(self):
+        """Fetch market data from Polygon"""
+        ticker = self.session_info.ticker_input.text().strip()
+        if not ticker:
+            QMessageBox.warning(self, "Missing Ticker", "Please enter a ticker symbol.")
+            return
+        
+        session_datetime = self.session_info.datetime_input.dateTime().toPyDateTime()
+        
+        # Update status
+        self.session_info.fetch_data_btn.setEnabled(False)
+        self.session_info.fetch_data_btn.setText("Fetching...")
+        
+        # Update status bar if available
+        if hasattr(self.parent(), 'statusBar'):
+            self.parent().statusBar().showMessage(f"Fetching market data for {ticker}...")
+        
+        # Fetch data
+        self.polygon_service.fetch_session_data(ticker, session_datetime)
+    
+    @pyqtSlot()
+    def _on_ticker_changed(self):
+        """Handle ticker change - only fetch if we have a valid ticker"""
+        ticker = self.session_info.ticker_input.text().strip()
+        if ticker and len(ticker) >= 1:  # Only auto-fetch if ticker is entered
+            self._fetch_market_data()
+    
+    @pyqtSlot()
+    def _on_datetime_changed(self):
+        """Handle datetime change - only fetch if we have a ticker"""
+        ticker = self.session_info.ticker_input.text().strip()
+        if ticker:
+            # Optional: Only fetch if datetime changed significantly
+            # For now, we'll let the user manually fetch after datetime changes
+            pass
+    
+    @pyqtSlot(dict)
+    def _on_metrics_updated(self, metrics: dict):
+        """Handle metrics update from Polygon service"""
+        self.metrics_frame.update_metrics(metrics)
+        
+        # Re-enable button
+        self.session_info.fetch_data_btn.setEnabled(True)
+        self.session_info.fetch_data_btn.setText("Fetch Market Data")
+        
+        # Update status bar if available
+        if hasattr(self.parent(), 'statusBar'):
+            self.parent().statusBar().showMessage("Market data fetched successfully", 5000)
+        
+        # Emit data changed signal
+        self.data_changed.emit()
+    
+    @pyqtSlot(bool, str)
+    def _on_connection_status(self, connected: bool, message: str):
+        """Handle connection status from Polygon service"""
+        if not connected:
+            QMessageBox.warning(
+                self, 
+                "Polygon Connection", 
+                f"Unable to connect to Polygon REST API:\n{message}\n\n"
+                "Please ensure the Polygon server is running at http://localhost:8000"
+            )
+    
     @pyqtSlot()
     def _on_run_analysis(self):
         """Handle run analysis button click"""
@@ -742,8 +833,10 @@ class OverviewWidget(QWidget):
         
         # Emit signal for database save
         self.save_to_database.emit(data)
-        
-        QMessageBox.information(self, "Save to Supabase", "Session data sent to database!")
+    
+    def validate_and_save(self):
+        """Validate data and trigger save (called from main window)"""
+        self._on_save_to_database()
     
     def collect_session_data(self) -> Dict[str, Any]:
         """Collect all session data from the widget"""
@@ -756,6 +849,87 @@ class OverviewWidget(QWidget):
             'zones': self.zone_table.get_zone_data(),
             'timestamp': datetime.now()
         }
+    
+    def load_session_data(self, session_data: Dict[str, Any]):
+        """Load session data into the UI"""
+        # Load ticker and datetime
+        if 'ticker' in session_data:
+            self.session_info.ticker_input.setText(session_data['ticker'])
+        
+        if 'is_live' in session_data:
+            self.session_info.live_toggle.setChecked(session_data['is_live'])
+        
+        if 'datetime' in session_data:
+            dt = session_data['datetime']
+            if isinstance(dt, str):
+                dt = datetime.fromisoformat(dt)
+            self.session_info.datetime_input.setDateTime(QDateTime(dt))
+        
+        # Load weekly data
+        if 'weekly' in session_data and session_data['weekly']:
+            weekly = session_data['weekly']
+            if 'trend_direction' in weekly:
+                idx = self.weekly_frame.trend_direction.findText(weekly['trend_direction'])
+                if idx >= 0:
+                    self.weekly_frame.trend_direction.setCurrentIndex(idx)
+            if 'internal_trend' in weekly:
+                idx = self.weekly_frame.internal_trend.findText(weekly['internal_trend'])
+                if idx >= 0:
+                    self.weekly_frame.internal_trend.setCurrentIndex(idx)
+            if 'position_structure' in weekly:
+                self.weekly_frame.position_structure.setValue(int(weekly['position_structure']))
+            if 'eow_bias' in weekly:
+                idx = self.weekly_frame.eow_bias.findText(weekly['eow_bias'])
+                if idx >= 0:
+                    self.weekly_frame.eow_bias.setCurrentIndex(idx)
+            if 'notes' in weekly:
+                self.weekly_frame.notes.setPlainText(weekly['notes'])
+        
+        # Load daily data
+        if 'daily' in session_data and session_data['daily']:
+            daily = session_data['daily']
+            if 'trend_direction' in daily:
+                idx = self.daily_frame.trend_direction.findText(daily['trend_direction'])
+                if idx >= 0:
+                    self.daily_frame.trend_direction.setCurrentIndex(idx)
+            if 'internal_trend' in daily:
+                idx = self.daily_frame.internal_trend.findText(daily['internal_trend'])
+                if idx >= 0:
+                    self.daily_frame.internal_trend.setCurrentIndex(idx)
+            if 'position_structure' in daily:
+                self.daily_frame.position_structure.setValue(int(daily['position_structure']))
+            if 'eod_bias' in daily:
+                idx = self.daily_frame.eod_bias.findText(daily['eod_bias'])
+                if idx >= 0:
+                    self.daily_frame.eod_bias.setCurrentIndex(idx)
+            if 'notes' in daily:
+                self.daily_frame.notes.setPlainText(daily['notes'])
+            
+            # Load price levels
+            if 'price_levels' in daily:
+                levels = daily['price_levels']
+                for i, level in enumerate(levels[:3]):  # Above levels
+                    if i < len(self.daily_frame.above_levels):
+                        self.daily_frame.above_levels[i].setValue(float(level))
+                for i, level in enumerate(levels[3:6]):  # Below levels
+                    if i < len(self.daily_frame.below_levels):
+                        self.daily_frame.below_levels[i].setValue(float(level))
+        
+        # Load zones
+        if 'zones' in session_data and session_data['zones']:
+            for row, zone in enumerate(session_data['zones'][:6]):
+                if 'datetime' in zone:
+                    self.zone_table.item(row, 1).setText(zone['datetime'])
+                if 'level' in zone:
+                    self.zone_table.item(row, 2).setText(str(zone['level']))
+                if 'high' in zone:
+                    self.zone_table.item(row, 3).setText(str(zone['high']))
+                if 'low' in zone:
+                    self.zone_table.item(row, 4).setText(str(zone['low']))
+        
+        # After loading, fetch market data
+        if 'ticker' in session_data:
+            self._fetch_market_data()
     
     def update_calculations(self, results: Dict[str, Any]):
         """Update calculation displays with analysis results"""

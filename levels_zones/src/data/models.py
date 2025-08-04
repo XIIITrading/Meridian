@@ -207,12 +207,16 @@ class TradingSession:
         # Validate M15 levels count (max 6: 3 above, 3 below)
         if len(self.m15_levels) > 6:
             raise ValueError("Maximum 6 M15 levels allowed (3 above, 3 below)")
-    
+
     def calculate_atr_bands(self):
         """Calculate ATR high and low bands"""
-        if self.pre_market_price and self.daily_atr:
+        if self.pre_market_price > 0 and self.daily_atr > 0:
             self.atr_high = self.pre_market_price + self.daily_atr
             self.atr_low = self.pre_market_price - self.daily_atr
+        else:
+            # Don't calculate if we don't have the required data
+            self.atr_high = Decimal("0.00")
+            self.atr_low = Decimal("0.00")
     
     def get_levels_sorted_by_price(self, ascending: bool = True) -> List[PriceLevel]:
         """Get all price levels sorted by price"""

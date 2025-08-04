@@ -9,9 +9,11 @@ from decimal import Decimal
 from typing import Optional, Dict, Any
 
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QLabel, QTextEdit, QScrollArea, QMessageBox
+    QWidget, QVBoxLayout, QLabel, QTextEdit, QScrollArea, QMessageBox,
+    QHBoxLayout, QPushButton, QStatusBar
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QDateTime, pyqtSlot, QDate, QTime
+from PyQt6.QtGui import QColor
 
 # Import dark theme
 from ui.dark_theme import DarkTheme, DarkStyleSheets
@@ -64,10 +66,10 @@ class OverviewWidget(QWidget):
         self.session_info = SessionInfoFrame()
         self.session_info.run_analysis_btn.clicked.connect(self._on_run_analysis)
         self.session_info.fetch_data_btn.clicked.connect(self._fetch_market_data)
-        self.session_info.save_to_db_btn.clicked.connect(self._on_save_to_database)  # Connect the save button
+        self.session_info.save_to_db_btn.clicked.connect(self._on_save_to_database)
         container_layout.addWidget(self.session_info)
         
-        # Metrics section (MOVED UP HERE)
+        # Metrics section
         self.metrics_frame = MetricsFrame()
         container_layout.addWidget(self.metrics_frame)
         
@@ -85,7 +87,9 @@ class OverviewWidget(QWidget):
         self.daily_frame = DailyAnalysisFrame()
         container_layout.addWidget(self.daily_frame)
         
-        # M15 Zone Data Entry
+        # M15 Zone Data Entry with Query Data button
+        zone_header_layout = QHBoxLayout()
+        
         zone_label = QLabel("M15 Zone Data Entry")
         zone_label.setStyleSheet(f"""
             QLabel {{
@@ -98,9 +102,41 @@ class OverviewWidget(QWidget):
                 border-radius: 3px;
             }}
         """)
-        zone_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        container_layout.addWidget(zone_label)
+        zone_header_layout.addWidget(zone_label)
         
+        # Add Query Data button
+        self.query_data_btn = QPushButton("Query Data")
+        self.query_data_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {DarkTheme.INFO};
+                border: none;
+                border-radius: 3px;
+                color: white;
+                font-weight: bold;
+                padding: 6px 12px;
+                font-size: 11px;
+            }}
+            QPushButton:hover {{
+                background-color: #1976d2;
+            }}
+            QPushButton:pressed {{
+                background-color: #0d47a1;
+            }}
+            QPushButton:disabled {{
+                background-color: {DarkTheme.BG_LIGHT};
+                color: {DarkTheme.TEXT_DISABLED};
+            }}
+        """)
+        self.query_data_btn.setMaximumWidth(120)
+        self.query_data_btn.setToolTip("Query M15 candle data from Polygon (Ctrl+Q)")
+        self.query_data_btn.setShortcut("Ctrl+Q")
+        self.query_data_btn.clicked.connect(self._on_query_zone_data)
+        zone_header_layout.addWidget(self.query_data_btn)
+        
+        zone_header_layout.addStretch()
+        container_layout.addLayout(zone_header_layout)
+        
+        # Add the zone table
         self.zone_table = M15ZoneTable()
         container_layout.addWidget(self.zone_table)
         
@@ -171,6 +207,14 @@ class OverviewWidget(QWidget):
         for level in self.daily_frame.above_levels + self.daily_frame.below_levels:
             level.valueChanged.connect(lambda: self.data_changed.emit())
     
+    def statusBar(self):
+        """Get the main window's status bar"""
+        main_window = self.window()
+        if hasattr(main_window, 'statusBar'):
+            return main_window.statusBar()
+        # Return a dummy status bar if not found
+        return QStatusBar()
+    
     def _on_ticker_changed(self, ticker: str):
         """Handle ticker changes"""
         if len(ticker.strip()) >= 1:
@@ -194,6 +238,161 @@ class OverviewWidget(QWidget):
             'ticker': ticker.upper(),
             'datetime': datetime_val
         })
+    
+    @pyqtSlot()
+    def _on_query_zone_data(self):
+        """Query and populate M15 zone candle data from Polygon"""
+        ticker = self.session_info.ticker_input.text().strip()
+        if not ticker:
+            QMessageBox.warning(self, "Missing Ticker", "Please enter a ticker symbol.")
+            return
+        
+        # Validate zone times first
+        time_errors = self.zone_table.validate_zone_times()
+        if time_errors:
+            QMessageBox.warning(
+                self, 
+                "Invalid Time Format", 
+                "Please correct the following time format errors:\n\n" + "\n".join(time_errors)
+            )
+            return
+        
+        # Check if we have any valid zones
+        valid_zone_count = self.zone_table.get_valid_zone_count()
+        if valid_zone_count == 0:
+            QMessageBox.warning(
+                self, 
+                "No Valid Zones", 
+                "Please enter date and time (in UTC) for at least one zone.\n\n"
+                "Time format: hh:mm:ss\n"
+                "Example: 14:30:00 for market open"
+            )
+            return
+        
+        # Import the calculator with proper path handling
+        import sys
+        from pathlib import Path
+        
+        # Navigate to project root - this is the exact path that works
+        widget_dir = Path(__file__).parent
+        project_root = widget_dir.parent.parent.parent.parent
+        
+        # Add project root to path if not already there
+        if str(project_root) not in sys.path:
+            sys.path.insert(0, str(project_root))
+        
+        # Also add src path for the data imports inside m15_zone_calc
+        src_path = project_root / 'src'
+        if str(src_path) not in sys.path:
+            sys.path.insert(0, str(src_path))
+        
+        try:
+            # Now import should work
+            from calculations.candlestick.m15_zone_calc import M15ZoneCalculator
+        except ImportError as e:
+            logger.error(f"Failed to import M15ZoneCalculator: {e}")
+            QMessageBox.critical(
+                self, 
+                "Import Error", 
+                f"Failed to import M15 Zone Calculator:\n{str(e)}\n\n"
+                "Please ensure the calculations/candlestick/m15_zone_calc.py file exists."
+            )
+            return
+        
+        # Disable button and show progress
+        self.query_data_btn.setEnabled(False)
+        self.query_data_btn.setText("Querying...")
+        
+        # Show status
+        self.statusBar().showMessage(f"Querying M15 candle data for {ticker} ({valid_zone_count} zones)...")
+        
+        try:
+            # Get zone data from table
+            zones = self.zone_table.get_zone_data()
+            
+            # Create calculator and fetch data
+            calculator = M15ZoneCalculator()
+            
+            # Test connection first
+            connected, msg = calculator.test_connection()
+            if not connected:
+                raise Exception(f"Polygon connection failed: {msg}")
+            
+            # Fetch candle data for all zones
+            results = calculator.fetch_all_zone_candles(ticker.upper(), zones)
+            
+            # Track results
+            updated_count = 0
+            failed_zones = []
+            
+            # Update table with results
+            for zone_idx, candle_data in results:
+                if candle_data:
+                    # Update the table cells
+                    # Level = Mid price (calculated as (high + low) / 2)
+                    self.zone_table.item(zone_idx, 3).setText(f"{candle_data['mid']:.2f}")
+                    # Zone High = Candle High
+                    self.zone_table.item(zone_idx, 4).setText(f"{candle_data['high']:.2f}")
+                    # Zone Low = Candle Low
+                    self.zone_table.item(zone_idx, 5).setText(f"{candle_data['low']:.2f}")
+                    
+                    # Set text color to indicate successful fetch
+                    for col in [3, 4, 5]:
+                        self.zone_table.item(zone_idx, col).setForeground(QColor(DarkTheme.SUCCESS))
+                    
+                    updated_count += 1
+                else:
+                    # Check if this zone had valid date/time
+                    zone = zones[zone_idx]
+                    if zone.get('date') and zone.get('time') and \
+                    zone['date'] != 'yyyy-mm-dd' and \
+                    zone['time'] not in ['hh:mm:ss', 'hh:mm:ss UTC']:
+                        failed_zones.append(f"Zone {zone_idx + 1}: {zone['date']} {zone['time']}")
+            
+            # Show results
+            self.statusBar().showMessage(f"Query complete: {updated_count} zones updated", 5000)
+            
+            if updated_count > 0:
+                message = f"Successfully queried data for {updated_count} zone(s).\n\n"
+                message += "Data populated:\n"
+                message += "• Level = Midpoint of candle (High + Low) / 2\n"
+                message += "• Zone High = Candle High\n"
+                message += "• Zone Low = Candle Low"
+                
+                if failed_zones:
+                    message += f"\n\nNo data found for {len(failed_zones)} zone(s):\n"
+                    message += "\n".join(failed_zones[:5])  # Show first 5
+                    if len(failed_zones) > 5:
+                        message += f"\n... and {len(failed_zones) - 5} more"
+                
+                QMessageBox.information(self, "Query Complete", message)
+                self.data_changed.emit()  # Signal that data has changed
+            else:
+                QMessageBox.warning(
+                    self, 
+                    "No Data Found", 
+                    "No candle data found for the specified zones.\n\n"
+                    "Please check:\n"
+                    "• Times are in UTC format\n"
+                    "• Times are within market hours (08:00-00:00 UTC)\n"
+                    "• Dates are valid trading days (Mon-Fri)\n"
+                    "• Ticker symbol is correct"
+                )
+                
+        except Exception as e:
+            logger.error(f"Error querying zone data: {e}")
+            self.statusBar().showMessage("Query failed", 3000)
+            QMessageBox.critical(
+                self, 
+                "Query Error", 
+                f"Error querying candle data:\n\n{str(e)}\n\n"
+                "Please check your Polygon connection and try again."
+            )
+        
+        finally:
+            # Re-enable button
+            self.query_data_btn.setEnabled(True)
+            self.query_data_btn.setText("Query Data")
     
     @pyqtSlot()
     def _on_run_analysis(self):
@@ -243,6 +442,31 @@ class OverviewWidget(QWidget):
         time = self.session_info.time_input.time().toPyTime()
         datetime_val = datetime.combine(date, time)
         
+        # Collect metrics data
+        metrics_data = {}
+        
+        # Helper function to safely get float value from QLineEdit
+        def get_metric_value(widget):
+            text = widget.text().strip()
+            if text:
+                try:
+                    return float(text)
+                except ValueError:
+                    return 0.0
+            return 0.0
+        
+        # Collect all metric values
+        metrics_data['atr_5min'] = get_metric_value(self.metrics_frame.atr_5min)
+        metrics_data['atr_10min'] = get_metric_value(self.metrics_frame.atr_10min)
+        metrics_data['atr_15min'] = get_metric_value(self.metrics_frame.atr_15min)
+        metrics_data['daily_atr'] = get_metric_value(self.metrics_frame.daily_atr)
+        metrics_data['atr_high'] = get_metric_value(self.metrics_frame.atr_high)
+        metrics_data['atr_low'] = get_metric_value(self.metrics_frame.atr_low)
+        
+        # Use current price as pre-market price if available
+        if pre_market_price == 0 and metrics_data.get('current_price'):
+            pre_market_price = metrics_data['current_price']
+        
         return {
             'ticker': self.session_info.ticker_input.text().strip().upper(),
             'is_live': self.session_info.live_toggle.isChecked(),
@@ -251,6 +475,7 @@ class OverviewWidget(QWidget):
             'daily': self.daily_frame.get_data(),
             'zones': self.zone_table.get_zone_data(),
             'pre_market_price': pre_market_price,
+            'metrics': metrics_data,  # Add metrics to the data
             'timestamp': datetime.now()
         }
     
@@ -324,9 +549,12 @@ class OverviewWidget(QWidget):
                     if i < len(self.daily_frame.below_levels):
                         self.daily_frame.below_levels[i].setValue(float(level))
         
-        # Load zones - UPDATED SECTION
+        # Load zones
         if 'zones' in session_data and session_data['zones']:
             for row, zone in enumerate(session_data['zones'][:6]):
+                zone_data = {}
+                
+                # Handle datetime formats
                 if 'datetime' in zone and zone['datetime']:
                     # Split datetime into date and time
                     datetime_str = zone['datetime']
@@ -334,27 +562,29 @@ class OverviewWidget(QWidget):
                         # Full datetime format
                         try:
                             dt = datetime.fromisoformat(datetime_str.replace('Z', '+00:00'))
-                            self.zone_table.item(row, 1).setText(dt.strftime('%Y-%m-%d'))
-                            self.zone_table.item(row, 2).setText(dt.strftime('%H:%M:%S'))
+                            zone_data['date'] = dt.strftime('%Y-%m-%d')
+                            zone_data['time'] = dt.strftime('%H:%M:%S')
                         except:
                             # Fallback: treat as time only
-                            self.zone_table.item(row, 2).setText(datetime_str)
+                            zone_data['time'] = datetime_str
                     else:
                         # Just time format (backward compatibility)
-                        self.zone_table.item(row, 2).setText(datetime_str)
+                        zone_data['time'] = datetime_str
                 
                 # Handle separate date/time fields if they exist
                 if 'date' in zone:
-                    self.zone_table.item(row, 1).setText(zone['date'])
+                    zone_data['date'] = zone['date']
                 if 'time' in zone:
-                    self.zone_table.item(row, 2).setText(zone['time'])
+                    zone_data['time'] = zone['time']
                 
                 if 'level' in zone:
-                    self.zone_table.item(row, 3).setText(str(zone['level']))
+                    zone_data['level'] = zone['level']
                 if 'high' in zone:
-                    self.zone_table.item(row, 4).setText(str(zone['high']))
+                    zone_data['high'] = zone['high']
                 if 'low' in zone:
-                    self.zone_table.item(row, 5).setText(str(zone['low']))
+                    zone_data['low'] = zone['low']
+                
+                self.zone_table.set_zone_data(row, zone_data)
         
         # After loading, fetch market data if we have a ticker
         if 'ticker' in session_data:
@@ -402,11 +632,8 @@ class OverviewWidget(QWidget):
         # Clear metrics
         self.metrics_frame.clear_all()
         
-        # Clear table - UPDATED FOR NEW COLUMN COUNT
-        for row in range(self.zone_table.rowCount()):
-            for col in range(1, self.zone_table.columnCount()):
-                if self.zone_table.item(row, col):
-                    self.zone_table.item(row, col).setText("")
+        # Clear table
+        self.zone_table.clear_all_zones()
         
         # Clear calculations
         self.calculations.hvn_7day.text_area.clear()

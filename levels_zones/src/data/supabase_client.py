@@ -63,13 +63,14 @@ class SupabaseClient:
                 'historical_time': session.historical_time.isoformat() if session.historical_time else None,
                 'weekly_data': session.weekly_data.to_dict() if session.weekly_data else None,
                 'daily_data': session.daily_data.to_dict() if session.daily_data else None,
-                'pre_market_price': str(session.pre_market_price) if session.pre_market_price else None,
-                'atr_5min': str(session.atr_5min) if session.atr_5min else None,
-                'atr_10min': str(session.atr_10min) if session.atr_10min else None,
-                'atr_15min': str(session.atr_15min) if session.atr_15min else None,
-                'daily_atr': str(session.daily_atr) if session.daily_atr else None,
-                'atr_high': str(session.atr_high) if session.atr_high else None,
-                'atr_low': str(session.atr_low) if session.atr_low else None
+                # Ensure all metrics are included
+                'pre_market_price': float(session.pre_market_price) if session.pre_market_price else None,
+                'atr_5min': float(session.atr_5min) if session.atr_5min else None,
+                'atr_10min': float(session.atr_10min) if session.atr_10min else None,
+                'atr_15min': float(session.atr_15min) if session.atr_15min else None,
+                'daily_atr': float(session.daily_atr) if session.daily_atr else None,
+                'atr_high': float(session.atr_high) if session.atr_high else None,
+                'atr_low': float(session.atr_low) if session.atr_low else None
             }
             
             # Insert into trading_sessions table
@@ -156,15 +157,19 @@ class SupabaseClient:
             
             # Prepare update data
             update_data = {
+                'is_live': session.is_live,
+                'historical_date': session.historical_date.isoformat() if session.historical_date else None,
+                'historical_time': session.historical_time.isoformat() if session.historical_time else None,
                 'weekly_data': session.weekly_data.to_dict() if session.weekly_data else None,
                 'daily_data': session.daily_data.to_dict() if session.daily_data else None,
-                'pre_market_price': str(session.pre_market_price) if session.pre_market_price else None,
-                'atr_5min': str(session.atr_5min) if session.atr_5min else None,
-                'atr_10min': str(session.atr_10min) if session.atr_10min else None,
-                'atr_15min': str(session.atr_15min) if session.atr_15min else None,
-                'daily_atr': str(session.daily_atr) if session.daily_atr else None,
-                'atr_high': str(session.atr_high) if session.atr_high else None,
-                'atr_low': str(session.atr_low) if session.atr_low else None
+                # Include all metrics in update
+                'pre_market_price': float(session.pre_market_price) if session.pre_market_price else None,
+                'atr_5min': float(session.atr_5min) if session.atr_5min else None,
+                'atr_10min': float(session.atr_10min) if session.atr_10min else None,
+                'atr_15min': float(session.atr_15min) if session.atr_15min else None,
+                'daily_atr': float(session.daily_atr) if session.daily_atr else None,
+                'atr_high': float(session.atr_high) if session.atr_high else None,
+                'atr_low': float(session.atr_low) if session.atr_low else None
             }
             
             # Update the session
@@ -416,6 +421,7 @@ class SupabaseClient:
     def _session_from_db(self, data: Dict[str, Any]) -> TradingSession:
         """
         Convert database record to TradingSession object.
+        All timestamps are stored and retrieved in UTC.
         
         Args:
             data: Database record dictionary
@@ -458,11 +464,20 @@ class SupabaseClient:
         if data.get('atr_low'):
             session.atr_low = Decimal(data['atr_low'])
         
-        # Set timestamps
+        # Set timestamps - simple UTC handling
         if data.get('created_at'):
-            session.created_at = datetime.fromisoformat(data['created_at'].replace('Z', '+00:00'))
+            # Remove 'Z' suffix if present and parse as UTC
+            created_str = data['created_at'].replace('Z', '')
+            if '+' not in created_str and not created_str.endswith('00:00'):
+                created_str += '+00:00'
+            session.created_at = datetime.fromisoformat(created_str)
+            
         if data.get('updated_at'):
-            session.updated_at = datetime.fromisoformat(data['updated_at'].replace('Z', '+00:00'))
+            # Remove 'Z' suffix if present and parse as UTC
+            updated_str = data['updated_at'].replace('Z', '')
+            if '+' not in updated_str and not updated_str.endswith('00:00'):
+                updated_str += '+00:00'
+            session.updated_at = datetime.fromisoformat(updated_str)
         
         return session
     

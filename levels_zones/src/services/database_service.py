@@ -179,7 +179,7 @@ class DatabaseService(QObject):
     
     def _create_session_from_ui_data(self, data: Dict[str, Any]) -> TradingSession:
         """Convert UI data format to TradingSession model"""
-        # Parse the datetime
+        # Parse the datetime - already in UTC
         session_datetime = data['datetime']
         session_date = session_datetime.date()
         
@@ -190,9 +190,14 @@ class DatabaseService(QObject):
             is_live=data['is_live']
         )
         
-        # Add timestamps
-        session.created_at = data.get('timestamp', datetime.now())
-        session.updated_at = datetime.now()
+        # If not live, use the entered date/time as historical date/time
+        if not data['is_live']:
+            session.historical_date = session_date
+            session.historical_time = session_datetime.time()
+        
+        # Add timestamps - in UTC
+        session.created_at = data.get('timestamp', datetime.utcnow())
+        session.updated_at = datetime.utcnow()
         
         # Add weekly data if present
         if data.get('weekly'):
@@ -217,25 +222,50 @@ class DatabaseService(QObject):
                 notes=daily.get('notes', '')
             )
         
-        # Add M15 zones as price levels - UPDATED SECTION
+        # Add metrics - IMPORTANT: These need to be collected from the UI
+        # Get pre_market_price from the data if provided
+        if data.get('pre_market_price'):
+            session.pre_market_price = Decimal(str(data['pre_market_price']))
+        
+        # Get ATR values if they exist in the metrics frame
+        if data.get('metrics'):
+            metrics = data['metrics']
+            if 'atr_5min' in metrics:
+                session.atr_5min = Decimal(str(metrics['atr_5min']))
+            if 'atr_10min' in metrics:
+                session.atr_10min = Decimal(str(metrics['atr_10min']))
+            if 'atr_15min' in metrics:
+                session.atr_15min = Decimal(str(metrics['atr_15min']))
+            if 'daily_atr' in metrics:
+                session.daily_atr = Decimal(str(metrics['daily_atr']))
+            if 'atr_high' in metrics:
+                session.atr_high = Decimal(str(metrics['atr_high']))
+            if 'atr_low' in metrics:
+                session.atr_low = Decimal(str(metrics['atr_low']))
+        
+        # Simplified M15 zones handling
         if data.get('zones'):
             for zone in data['zones']:
-                # Parse zone data
                 zone_num = zone['zone_number']
                 
                 # Create level_id
                 level_id = session.generate_level_id(len(session.m15_levels))
                 
-                # Combine date and time
-                zone_date_str = zone.get('date', '')
-                zone_time_str = zone.get('time', '')
+                # Default to session datetime
+                zone_datetime = session_datetime
                 
-                # Handle datetime combination
-                if zone_date_str and zone_time_str:
-                    try:
-                        # Parse date and time separately
-                        date_parts = zone_date_str.split('-')
-                        time_parts = zone_time_str.split(':')
+                # Simple date/time parsing
+                try:
+                    date_str = zone.get('date', '')
+                    time_str = zone.get('time', '')
+                    
+                    # Only parse if we have valid looking data
+                    if (date_str and date_str != 'yyyy-mm-dd' and 
+                        time_str and time_str != 'hh:mm:ss'):
+                        
+                        # Simple parsing
+                        date_parts = date_str.split('-')
+                        time_parts = time_str.split(':')
                         
                         if len(date_parts) == 3 and len(time_parts) >= 2:
                             year = int(date_parts[0])
@@ -246,43 +276,33 @@ class DatabaseService(QObject):
                             second = int(time_parts[2]) if len(time_parts) > 2 else 0
                             
                             zone_datetime = datetime(year, month, day, hour, minute, second)
-                        else:
-                            # Fallback to session datetime
-                            zone_datetime = session_datetime
-                    except:
-                        # If parsing fails, use session datetime
-                        zone_datetime = session_datetime
-                elif zone.get('datetime'):
-                    # Handle legacy datetime field for backward compatibility
-                    zone_dt_str = zone['datetime']
-                    try:
-                        # Try parsing as datetime
-                        zone_datetime = datetime.fromisoformat(zone_dt_str)
-                    except:
-                        # If it's just a time, combine with session date
-                        try:
-                            time_parts = zone_dt_str.split(':')
-                            hour = int(time_parts[0])
-                            minute = int(time_parts[1]) if len(time_parts) > 1 else 0
-                            zone_datetime = datetime.combine(session_date, 
-                                                           datetime.min.time().replace(hour=hour, minute=minute))
-                        except:
-                            # Default to session datetime
-                            zone_datetime = session_datetime
-                else:
-                    # Default to session datetime if no date/time provided
-                    zone_datetime = session_datetime
+                            
+                except Exception as e:
+                    logger.debug(f"Using session datetime for zone {zone_num}: {e}")
                 
-                # Create price level
-                level = PriceLevel(
-                    line_price=Decimal(str(zone['level'])) if zone.get('level') else Decimal("0"),
-                    candle_datetime=zone_datetime,
-                    candle_high=Decimal(str(zone['high'])) if zone.get('high') else Decimal("0"),
-                    candle_low=Decimal(str(zone['low'])) if zone.get('low') else Decimal("0"),
-                    level_id=level_id
-                )
-                
-                session.m15_levels.append(level)
+                # Create price level with default values for empty fields
+                try:
+                    level_value = Decimal(str(zone.get('level', 0))) if zone.get('level') else Decimal("0")
+                    high_value = Decimal(str(zone.get('high', 0))) if zone.get('high') else Decimal("0")
+                    low_value = Decimal(str(zone.get('low', 0))) if zone.get('low') else Decimal("0")
+                    
+                    # If high/low are 0, use level value
+                    if high_value == 0 and level_value > 0:
+                        high_value = level_value
+                    if low_value == 0 and level_value > 0:
+                        low_value = level_value
+                    
+                    level = PriceLevel(
+                        line_price=level_value,
+                        candle_datetime=zone_datetime,
+                        candle_high=high_value,
+                        candle_low=low_value,
+                        level_id=level_id
+                    )
+                    session.m15_levels.append(level)
+                    
+                except Exception as e:
+                    logger.warning(f"Skipping zone {zone_num} due to error: {e}")
         
         return session
     

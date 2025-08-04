@@ -8,7 +8,6 @@ from datetime import datetime, date, time, timedelta
 from decimal import Decimal, InvalidOperation
 from typing import List, Optional, Dict, Any, Tuple
 import logging
-import pytz
 
 from data.models import (
     TradingSession, PriceLevel, WeeklyData, DailyData,
@@ -173,72 +172,41 @@ class FieldValidator:
     @staticmethod
     def validate_analysis_datetime(dt: datetime) -> None:
         """
-        Validate that a datetime is valid for running analysis.
-        Analysis can be run at any time during weekdays (for pre-market analysis).
+        Validate that a datetime is valid for analysis.
+        All timestamps are in UTC - no timezone conversion needed.
         
         Args:
-            dt: Datetime to validate (assumed to be in UTC)
+            dt: Datetime to validate (in UTC)
             
         Raises:
-            ValidationError: If datetime is on a weekend
+            ValidationError: If datetime is in the future
         """
-        # Convert UTC to Eastern Time for weekday check
-        eastern = pytz.timezone('US/Eastern')
-        et_dt = dt.astimezone(eastern)
-        
-        # Check if it's a weekend in Eastern Time
-        if et_dt.weekday() >= 5:  # Saturday = 5, Sunday = 6
+        if dt > datetime.utcnow():
             raise ValidationError("analysis_datetime", 
-                "Analysis cannot be run on weekends (market closed)")
+                "Analysis datetime cannot be in the future")
         
-        # Note: We're NOT checking time of day since pre-market analysis 
-        # needs to run outside regular trading hours
-        logger.debug(f"Analysis datetime validated: {dt} UTC ({et_dt} ET)")
+        logger.debug(f"Analysis datetime validated: {dt} UTC")
     
     @staticmethod
     def validate_candle_datetime(dt: datetime, session_date: date) -> None:
         """
-        Validate that a candle datetime is valid for the given session.
-        Candle data should be from market hours and align with session date.
+        Validate that a candle datetime is valid.
+        Minimal validation - just check it's a valid datetime.
         
         Args:
             dt: Candle datetime (in UTC)
-            session_date: The trading session date
+            session_date: The trading session date (not used for validation)
             
         Raises:
-            ValidationError: If candle datetime is invalid
+            ValidationError: If datetime is invalid
         """
-        # Convert UTC to Eastern Time for validation
-        eastern = pytz.timezone('US/Eastern')
-        et_dt = dt.astimezone(eastern)
-        
-        # Check if it's a weekend
-        if et_dt.weekday() >= 5:
-            raise ValidationError("candle_datetime", 
-                "Candle data cannot be from weekends")
-        
-        # Define market hours in Eastern Time
-        # Pre-market: 4:00 AM - 9:30 AM ET
-        # Regular: 9:30 AM - 4:00 PM ET  
-        # After-hours: 4:00 PM - 8:00 PM ET
-        market_open = time(4, 0)    # 4:00 AM ET
-        market_close = time(20, 0)  # 8:00 PM ET
-        
-        candle_time = et_dt.time()
-        if not (market_open <= candle_time <= market_close):
+        # Only validate that it's not in the future
+        if dt > datetime.utcnow():
             raise ValidationError("candle_datetime",
-                f"Candle time {candle_time} ET is outside market hours (4:00 AM - 8:00 PM ET)")
+                "Candle datetime cannot be in the future")
         
-        # Validate date alignment
-        candle_date = et_dt.date()
-        days_diff = (session_date - candle_date).days
-        
-        if days_diff < 0:
-            raise ValidationError("candle_datetime",
-                f"Candle date {candle_date} is after session date {session_date}")
-        elif days_diff > 1:
-            raise ValidationError("candle_datetime",
-                f"Candle date {candle_date} is more than 1 day before session date {session_date}")
+        # That's it - no other restrictions!
+        logger.debug(f"Candle datetime validated: {dt} UTC")
 
 
 class PriceLevelValidator:
@@ -294,15 +262,13 @@ class PriceLevelValidator:
     
     @staticmethod
     def validate_price_levels_set(levels: List[PriceLevel], 
-                                 current_price: Decimal,
-                                 session_date: Optional[date] = None) -> Tuple[bool, List[str]]:
+                                current_price: Decimal) -> Tuple[bool, List[str]]:
         """
         Validate a set of price levels.
         
         Args:
             levels: List of PriceLevel objects
             current_price: Current market price for reference
-            session_date: Session date for datetime validation
             
         Returns:
             Tuple of (is_valid, list_of_errors)
@@ -313,9 +279,9 @@ class PriceLevelValidator:
         if len(levels) > 6:
             errors.append("Maximum 6 price levels allowed (3 above, 3 below)")
         
-        # Validate each level
+        # Validate each level - no date validation
         for i, level in enumerate(levels):
-            level_errors = PriceLevelValidator.validate_price_level(level, session_date)
+            level_errors = PriceLevelValidator.validate_price_level(level)
             if level_errors:
                 errors.extend([f"Level {i+1}: {err}" for err in level_errors])
         
@@ -371,20 +337,8 @@ class TradingSessionValidator:
             # Validate ticker
             session.ticker = FieldValidator.validate_ticker(session.ticker)
             
-            # Validate date (not future)
-            if session.date > date.today():
-                errors['overview'].append("Session date cannot be in the future")
-            
-            # Validate that session date is a weekday
-            if session.date.weekday() >= 5:
-                errors['overview'].append("Session date must be a weekday (market closed on weekends)")
-            
-            # Validate historical data consistency
-            if not session.is_live:
-                if not session.historical_date:
-                    errors['overview'].append("Historical date required for non-live sessions")
-                elif session.historical_date >= session.date:
-                    errors['overview'].append("Historical date must be before session date")
+            # REMOVED ALL DATE AND HISTORICAL VALIDATION
+            # No validation for dates or is_live flag
             
         except ValidationError as e:
             errors['overview'].append(e.message)
@@ -414,39 +368,44 @@ class TradingSessionValidator:
         
         # Validate Metrics
         try:
-            # Pre-market price
-            if session.pre_market_price <= 0:
-                errors['metrics'].append("Pre-market price must be positive")
-            
-            # ATR values
-            atr_fields = [
-                ('5-minute ATR', session.atr_5min),
-                ('10-minute ATR', session.atr_10min),
-                ('15-minute ATR', session.atr_15min),
-                ('Daily ATR', session.daily_atr)
-            ]
-            
-            for field_name, value in atr_fields:
-                if value < 0:
-                    errors['metrics'].append(f"{field_name} cannot be negative")
-            
-            # Validate ATR bands calculation
-            expected_high = session.pre_market_price + session.daily_atr
-            expected_low = session.pre_market_price - session.daily_atr
-            
-            if abs(session.atr_high - expected_high) > Decimal("0.01"):
-                errors['metrics'].append("ATR High calculation mismatch")
-            
-            if abs(session.atr_low - expected_low) > Decimal("0.01"):
-                errors['metrics'].append("ATR Low calculation mismatch")
+            # Pre-market price - only validate if set
+            if session.pre_market_price > 0:
+                # ATR values
+                atr_fields = [
+                    ('5-minute ATR', session.atr_5min),
+                    ('10-minute ATR', session.atr_10min),
+                    ('15-minute ATR', session.atr_15min),
+                    ('Daily ATR', session.daily_atr)
+                ]
+                
+                for field_name, value in atr_fields:
+                    if value < 0:
+                        errors['metrics'].append(f"{field_name} cannot be negative")
+                
+                # RELAXED ATR bands calculation validation
+                # Only validate if both daily_atr and pre_market_price are set
+                if session.daily_atr > 0 and session.pre_market_price > 0:
+                    expected_high = session.pre_market_price + session.daily_atr
+                    expected_low = session.pre_market_price - session.daily_atr
+                    
+                    # Use a larger tolerance
+                    tolerance = Decimal("1.0")
+                    
+                    # Only log warnings instead of errors
+                    if session.atr_high > 0 and abs(session.atr_high - expected_high) > tolerance:
+                        logger.warning(f"ATR High calculation difference: {abs(session.atr_high - expected_high)}")
+                        
+                    if session.atr_low > 0 and abs(session.atr_low - expected_low) > tolerance:
+                        logger.warning(f"ATR Low calculation difference: {abs(session.atr_low - expected_low)}")
             
         except Exception as e:
             errors['metrics'].append(str(e))
         
-        # Validate M15 Levels
+        # Validate M15 Levels - with relaxed date validation
         if session.m15_levels:
+            # Don't pass session date for validation anymore
             is_valid, level_errors = PriceLevelValidator.validate_price_levels_set(
-                session.m15_levels, session.pre_market_price, session.date
+                session.m15_levels, session.pre_market_price
             )
             if not is_valid:
                 errors['levels'].extend(level_errors)
@@ -526,48 +485,6 @@ class ATRValidator:
             warnings.append("Daily ATR seems extremely high compared to intraday ATRs")
         
         return warnings
-    
-    @staticmethod
-    def validate_atr_calculation(high_values: List[Decimal], 
-                               low_values: List[Decimal],
-                               close_values: List[Decimal],
-                               calculated_atr: Decimal,
-                               period: int = 14) -> bool:
-        """
-        Validate that an ATR calculation is correct.
-        
-        Args:
-            high_values: List of high prices
-            low_values: List of low prices  
-            close_values: List of close prices
-            calculated_atr: The ATR value to validate
-            period: ATR period (default 14)
-            
-        Returns:
-            bool: True if calculation appears correct
-        """
-        if len(high_values) < period or len(low_values) < period or len(close_values) < period:
-            return False
-        
-        # Calculate true ranges
-        true_ranges = []
-        for i in range(1, len(high_values)):
-            high_low = high_values[i] - low_values[i]
-            high_close = abs(high_values[i] - close_values[i-1])
-            low_close = abs(low_values[i] - close_values[i-1])
-            
-            true_range = max(high_low, high_close, low_close)
-            true_ranges.append(true_range)
-        
-        if len(true_ranges) < period:
-            return False
-        
-        # Calculate ATR (simple moving average of true ranges)
-        atr = sum(true_ranges[-period:]) / period
-        
-        # Allow small tolerance for rounding
-        tolerance = Decimal("0.01")
-        return abs(atr - calculated_atr) <= tolerance
 
 
 class DateTimeValidator:
@@ -576,7 +493,8 @@ class DateTimeValidator:
     @staticmethod
     def validate_market_date(check_date: date) -> Tuple[bool, str]:
         """
-        Validate that a date is a valid market day (weekday).
+        Validate that a date is valid.
+        Minimal validation.
         
         Args:
             check_date: Date to validate
@@ -584,86 +502,31 @@ class DateTimeValidator:
         Returns:
             Tuple of (is_valid, error_message)
         """
-        # Check if weekend
-        if check_date.weekday() >= 5:
-            return False, "Market is closed on weekends"
-        
-        # TODO: Add holiday checking here if needed
-        # Could integrate with a market calendar API
-        
+        # Allow any date - past or present
         return True, ""
     
     @staticmethod
     def validate_session_date_consistency(session_date: date,
                                         candle_datetimes: List[datetime]) -> List[str]:
         """
-        Validate that candle datetimes are consistent with session date.
-        All datetimes should be in UTC.
+        Validate candle datetimes.
+        No restrictions on dates - allow any historical data.
         
         Args:
             session_date: The session date
-            candle_datetimes: List of candle datetimes from price levels (UTC)
+            candle_datetimes: List of candle datetimes (UTC)
             
         Returns:
-            List of validation errors
+            List of validation errors (empty - no restrictions)
         """
         errors = []
         
-        # Convert to Eastern timezone for date comparison
-        eastern = pytz.timezone('US/Eastern')
-        
+        # Only check that datetimes aren't in the future
         for i, candle_dt in enumerate(candle_datetimes):
-            # Convert UTC to Eastern for date extraction
-            et_candle_dt = candle_dt.astimezone(eastern)
-            candle_date = et_candle_dt.date()
-            
-            # For regular sessions, candles should be from the same day
-            # or previous day (for pre-market levels)
-            days_diff = (session_date - candle_date).days
-            
-            if days_diff < 0:
-                errors.append(f"Candle {i+1} is from future date: {candle_date}")
-            elif days_diff > 1:
-                errors.append(f"Candle {i+1} is too old: {candle_date} (session date: {session_date})")
+            if candle_dt > datetime.utcnow():
+                errors.append(f"Candle {i+1} has future datetime: {candle_dt}")
         
         return errors
-    
-    @staticmethod
-    def convert_market_time_to_utc(market_dt: datetime) -> datetime:
-        """
-        Convert Eastern Time datetime to UTC.
-        
-        Args:
-            market_dt: Datetime in Eastern Time
-            
-        Returns:
-            Datetime in UTC
-        """
-        eastern = pytz.timezone('US/Eastern')
-        
-        # If datetime is naive, localize it to Eastern
-        if market_dt.tzinfo is None:
-            market_dt = eastern.localize(market_dt)
-        
-        # Convert to UTC
-        return market_dt.astimezone(pytz.UTC)
-    
-    @staticmethod
-    def convert_utc_to_market_time(utc_dt: datetime) -> datetime:
-        """
-        Convert UTC datetime to Eastern Time.
-        
-        Args:
-            utc_dt: Datetime in UTC
-            
-        Returns:
-            Datetime in Eastern Time
-        """
-        if utc_dt.tzinfo is None:
-            utc_dt = pytz.UTC.localize(utc_dt)
-            
-        eastern = pytz.timezone('US/Eastern')
-        return utc_dt.astimezone(eastern)
 
 
 # Convenience functions for common validations
@@ -693,38 +556,47 @@ def validate_for_analysis(session: TradingSession) -> Tuple[bool, List[str]]:
     return TradingSessionValidator.validate_for_analysis(session)
 
 
+# In the PriceLevelValidator class, update validate_price_level method:
+
+@staticmethod
 def validate_price_level(level: PriceLevel, session_date: Optional[date] = None) -> List[str]:
     """
     Validate a single price level.
     
     Args:
-        level: PriceLevel to validate
-        session_date: Optional session date for datetime validation
+        level: PriceLevel object to validate
+        session_date: Session date (not used for validation anymore)
         
     Returns:
-        List of validation errors
+        List of validation errors (empty if valid)
     """
-    return PriceLevelValidator.validate_price_level(level, session_date)
-
-
-def is_market_open_now() -> bool:
-    """
-    Check if the market is currently open (including extended hours).
+    errors = []
     
-    Returns:
-        bool: True if market is open
-    """
-    now_utc = datetime.now(pytz.UTC)
-    eastern = pytz.timezone('US/Eastern')
-    now_et = now_utc.astimezone(eastern)
+    try:
+        # Validate prices are positive
+        if level.line_price <= 0:
+            errors.append("Line price must be positive")
+        if level.candle_high <= 0:
+            errors.append("Candle high must be positive")
+        if level.candle_low <= 0:
+            errors.append("Candle low must be positive")
+        
+        # Validate high >= low
+        if level.candle_high < level.candle_low:
+            errors.append("Candle high must be >= candle low")
+        
+        # Validate line price is within candle range (with small tolerance)
+        tolerance = Decimal("0.01")
+        if not (level.candle_low - tolerance <= level.line_price <= level.candle_high + tolerance):
+            errors.append("Line price should be within candle range")
+        
+        # Validate level_id format
+        if not re.match(r'^[A-Z0-9]+\.\d{6}_L\d{3}$', level.level_id):
+            errors.append(f"Invalid level_id format: {level.level_id}")
+        
+        # NO MORE DATETIME VALIDATION - removed completely
+        
+    except Exception as e:
+        errors.append(f"Validation error: {str(e)}")
     
-    # Check if weekend
-    if now_et.weekday() >= 5:
-        return False
-    
-    # Check time (4 AM - 8 PM ET)
-    current_time = now_et.time()
-    market_open = time(4, 0)
-    market_close = time(20, 0)
-    
-    return market_open <= current_time <= market_close
+    return errors

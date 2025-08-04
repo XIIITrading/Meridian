@@ -281,8 +281,15 @@ class PolygonDataWorker(QThread):
         }).dropna()
     
     def _get_price_at_datetime(self, data: pd.DataFrame, target_datetime: datetime) -> float:
-        """Get price at specific datetime"""
-        # Simple comparison - everything is in UTC
+        """Get price at specific datetime - all in UTC"""
+        # Ensure data index has no timezone info for simple comparison
+        if data.index.tz is not None:
+            data.index = data.index.tz_localize(None)
+        
+        # Ensure target datetime has no timezone info
+        if hasattr(target_datetime, 'tzinfo') and target_datetime.tzinfo is not None:
+            target_datetime = target_datetime.replace(tzinfo=None)
+        
         if target_datetime in data.index:
             return float(data.loc[target_datetime, 'close'])
         
@@ -290,6 +297,24 @@ class PolygonDataWorker(QThread):
         time_diffs = abs(data.index - target_datetime)
         nearest_idx = time_diffs.argmin()
         return float(data.iloc[nearest_idx]['close'])
+
+    def _get_session_open_price(self, data: pd.DataFrame, session_date) -> float:
+        """Get opening price for regular trading session"""
+        # Filter for session date
+        session_data = data[data.index.date == session_date]
+        
+        if session_data.empty:
+            return 0.0
+        
+        # Find first bar after 14:30 UTC (9:30 AM ET)
+        market_open_utc = time(14, 30)
+        
+        for idx, row in session_data.iterrows():
+            if idx.time() >= market_open_utc:
+                return float(row['open'])
+        
+        # If no regular hours data, return first available
+        return float(session_data.iloc[0]['open'])
     
     def _get_session_open_price(self, data: pd.DataFrame, session_date) -> float:
         """Get opening price for regular trading session"""

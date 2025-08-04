@@ -13,9 +13,9 @@ from PyQt6.QtWidgets import (
     QLabel, QLineEdit, QPushButton, QCheckBox, QDateTimeEdit,
     QTableWidget, QTableWidgetItem, QHeaderView, QTextEdit,
     QSplitter, QFrame, QMessageBox, QDoubleSpinBox, QScrollArea,
-    QComboBox, QSpinBox
+    QComboBox, QSpinBox, QDateEdit, QTimeEdit
 )
-from PyQt6.QtCore import Qt, pyqtSignal, QDateTime, pyqtSlot
+from PyQt6.QtCore import Qt, pyqtSignal, QDateTime, pyqtSlot, QDate, QTime
 from PyQt6.QtGui import QFont, QColor
 
 # Import dark theme
@@ -85,7 +85,6 @@ class SessionInfoFrame(QFrame):
         self.ticker_input.setMaxLength(10)
         self.ticker_input.setStyleSheet(DarkStyleSheets.INPUT_FIELD)
         self.ticker_input.setPlaceholderText("Enter ticker...")
-        # Connect signal AFTER creating the widget
         self.ticker_input.textChanged.connect(self._on_ticker_text_changed)
         layout.addWidget(self.ticker_input)
         
@@ -95,14 +94,22 @@ class SessionInfoFrame(QFrame):
         self.live_toggle.setChecked(True)
         layout.addWidget(self.live_toggle)
         
-        # DateTime Entry
-        layout.addWidget(QLabel("DateTime Entry:"))
-        self.datetime_input = QDateTimeEdit()
-        self.datetime_input.setCalendarPopup(True)
-        self.datetime_input.setDateTime(QDateTime.currentDateTime())
-        self.datetime_input.setDisplayFormat("yyyy-MM-dd HH:mm:ss")
-        self.datetime_input.setStyleSheet(DarkStyleSheets.INPUT_FIELD)
-        layout.addWidget(self.datetime_input)
+        # Date Entry
+        layout.addWidget(QLabel("Date:"))
+        self.date_input = QDateEdit()
+        self.date_input.setCalendarPopup(True)
+        self.date_input.setDate(QDate.currentDate())
+        self.date_input.setDisplayFormat("yyyy-MM-dd")
+        self.date_input.setStyleSheet(DarkStyleSheets.INPUT_FIELD)
+        layout.addWidget(self.date_input)
+        
+        # Time Entry
+        layout.addWidget(QLabel("Time:"))
+        self.time_input = QTimeEdit()
+        self.time_input.setTime(QTime.currentTime())
+        self.time_input.setDisplayFormat("HH:mm:ss")
+        self.time_input.setStyleSheet(DarkStyleSheets.INPUT_FIELD)
+        layout.addWidget(self.time_input)
         
         # Fetch Market Data Button
         self.fetch_data_btn = QPushButton("Fetch Market Data")
@@ -113,11 +120,33 @@ class SessionInfoFrame(QFrame):
         # Spacer
         layout.addStretch()
         
-        # Run Analysis Button
+        # Run Analysis Button (NOW FIRST)
         self.run_analysis_btn = QPushButton("Run Analysis")
         self.run_analysis_btn.setStyleSheet(DarkStyleSheets.BUTTON_PRIMARY)
         self.run_analysis_btn.setMinimumWidth(120)
         layout.addWidget(self.run_analysis_btn)
+        
+        # Save to Supabase Button (NOW SECOND - TO THE RIGHT)
+        self.save_to_db_btn = QPushButton("Save to Supabase")
+        self.save_to_db_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {DarkTheme.SUCCESS};
+                border: none;
+                border-radius: 3px;
+                color: white;
+                font-weight: bold;
+                padding: 8px 16px;
+                font-size: 12px;
+            }}
+            QPushButton:hover {{
+                background-color: #45a049;
+            }}
+            QPushButton:pressed {{
+                background-color: #3d8b40;
+            }}
+        """)
+        self.save_to_db_btn.setMinimumWidth(120)
+        layout.addWidget(self.save_to_db_btn)
         
         self.setLayout(layout)
     
@@ -629,7 +658,12 @@ class OverviewWidget(QWidget):
         self.session_info = SessionInfoFrame()
         self.session_info.run_analysis_btn.clicked.connect(self._on_run_analysis)
         self.session_info.fetch_data_btn.clicked.connect(self._fetch_market_data)
+        self.session_info.save_to_db_btn.clicked.connect(self._on_save_to_database)  # Connect the save button
         container_layout.addWidget(self.session_info)
+        
+        # Metrics section (MOVED UP HERE)
+        self.metrics_frame = MetricsFrame()
+        container_layout.addWidget(self.metrics_frame)
         
         # Weekly Analysis Section
         weekly_header = SectionHeader("Weekly Analysis")
@@ -644,10 +678,6 @@ class OverviewWidget(QWidget):
         
         self.daily_frame = DailyAnalysisFrame()
         container_layout.addWidget(self.daily_frame)
-        
-        # Metrics section
-        self.metrics_frame = MetricsFrame()
-        container_layout.addWidget(self.metrics_frame)
         
         # M15 Zone Data Entry
         zone_label = QLabel("M15 Zone Data Entry")
@@ -695,35 +725,6 @@ class OverviewWidget(QWidget):
         self.zones_ranked.setReadOnly(True)
         container_layout.addWidget(self.zones_ranked)
         
-        # Save to Database button
-        save_button_layout = QHBoxLayout()
-        save_button_layout.addStretch()
-        
-        self.save_to_db_btn = QPushButton("Save to Supabase")
-        self.save_to_db_btn.setStyleSheet(f"""
-            QPushButton {{
-                background-color: {DarkTheme.SUCCESS};
-                border: none;
-                border-radius: 3px;
-                color: white;
-                font-weight: bold;
-                padding: 10px 30px;
-                font-size: 14px;
-            }}
-            QPushButton:hover {{
-                background-color: #45a049;
-            }}
-            QPushButton:pressed {{
-                background-color: #3d8b40;
-            }}
-        """)
-        self.save_to_db_btn.setMinimumWidth(200)
-        self.save_to_db_btn.clicked.connect(self._on_save_to_database)
-        save_button_layout.addWidget(self.save_to_db_btn)
-        
-        save_button_layout.addStretch()
-        container_layout.addLayout(save_button_layout)
-        
         # Add stretch at bottom
         container_layout.addStretch()
         
@@ -732,6 +733,11 @@ class OverviewWidget(QWidget):
         
         main_layout.addWidget(scroll_area)
         self.setLayout(main_layout)
+    
+    @property
+    def save_to_db_btn(self):
+        """Access save button from session info frame"""
+        return self.session_info.save_to_db_btn
     
     def _connect_signals(self):
         """Connect internal signals"""
@@ -767,7 +773,10 @@ class OverviewWidget(QWidget):
             QMessageBox.warning(self, "Missing Ticker", "Please enter a ticker symbol.")
             return
         
-        datetime_val = self.session_info.datetime_input.dateTime().toPyDateTime()
+        # Combine date and time
+        date = self.session_info.date_input.date().toPyDate()
+        time = self.session_info.time_input.time().toPyTime()
+        datetime_val = datetime.combine(date, time)
         
         # Emit signal to fetch market data
         self.fetch_market_data.emit({
@@ -818,10 +827,15 @@ class OverviewWidget(QWidget):
             except ValueError:
                 pass
         
+        # Combine date and time
+        date = self.session_info.date_input.date().toPyDate()
+        time = self.session_info.time_input.time().toPyTime()
+        datetime_val = datetime.combine(date, time)
+        
         return {
             'ticker': self.session_info.ticker_input.text().strip().upper(),
             'is_live': self.session_info.live_toggle.isChecked(),
-            'datetime': self.session_info.datetime_input.dateTime().toPyDateTime(),
+            'datetime': datetime_val,
             'weekly': self.weekly_frame.get_data(),
             'daily': self.daily_frame.get_data(),
             'zones': self.zone_table.get_zone_data(),
@@ -845,7 +859,9 @@ class OverviewWidget(QWidget):
             dt = session_data['datetime']
             if isinstance(dt, str):
                 dt = datetime.fromisoformat(dt)
-            self.session_info.datetime_input.setDateTime(QDateTime.fromPyDateTime(dt))
+            # Split datetime into date and time
+            self.session_info.date_input.setDate(QDate(dt.year, dt.month, dt.day))
+            self.session_info.time_input.setTime(QTime(dt.hour, dt.minute, dt.second))
         
         # Load weekly data
         if 'weekly' in session_data and session_data['weekly']:
@@ -943,7 +959,8 @@ class OverviewWidget(QWidget):
         """Clear all input fields"""
         self.session_info.ticker_input.clear()
         self.session_info.live_toggle.setChecked(True)
-        self.session_info.datetime_input.setDateTime(QDateTime.currentDateTime())
+        self.session_info.date_input.setDate(QDate.currentDate())
+        self.session_info.time_input.setTime(QTime.currentTime())
         
         # Clear weekly
         self.weekly_frame.clear_all()

@@ -43,6 +43,25 @@ class AnalysisThread(QThread):
         self.camarilla_engine = CamarillaEngine()
         self.camarilla_confluence = CamarillaConfluenceCalculator()
         
+    def _ensure_utc(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Ensure DataFrame has UTC timezone"""
+        if df.empty:
+            return df
+            
+        df = df.copy()
+        
+        if df.index.tz is None:
+            # If timezone-naive, localize to UTC
+            df.index = df.index.tz_localize('UTC')
+        else:
+            # Check if timezone is UTC (works for both pytz and datetime.timezone)
+            tz_name = str(df.index.tz)
+            if 'UTC' not in tz_name and 'utc' not in tz_name:
+                # If has timezone but not UTC, convert to UTC
+                df.index = df.index.tz_convert('UTC')
+        
+        return df
+        
     def run(self):
         """Run the analysis in background thread"""
         try:
@@ -86,6 +105,9 @@ class AnalysisThread(QThread):
             
             if data_5min.empty:
                 raise ValueError(f"No data returned for {ticker}")
+            
+            # Ensure UTC timezone
+            data_5min = self._ensure_utc(data_5min)
             
             # Ensure timestamp column exists for volume profile
             if 'timestamp' not in data_5min.columns:
@@ -135,87 +157,81 @@ class AnalysisThread(QThread):
                 logger.error(f"Error in HVN calculations: {e}")
                 raise
             
-            self.progress.emit(60, "Calculating confluence zones...")
+            self.progress.emit(60, "Preparing confluence analysis...")
             
-            # Step 4: Calculate HVN confluence
-            # Map to expected format for confluence calculator
-            confluence_input = {
-                15: hvn_results.get('7day'),   # Short-term
-                60: hvn_results.get('14day'),  # Medium-term  
-                120: hvn_results.get('30day')  # Long-term
-            }
+            # Step 4: Calculate HVN confluence - PLACEHOLDER FOR FUTURE IMPLEMENTATION
+            # ========== CONFLUENCE PLACEHOLDER ==========
+            # TODO: Integrate confluence_engine.py when available
+            # Expected interface:
+            # confluence_analysis = self.confluence_calculator.analyze(
+            #     hvn_results=hvn_results,
+            #     current_price=current_price
+            # )
             
-            # Remove any None values
-            confluence_input = {k: v for k, v in confluence_input.items() if v}
-            
-            # Get current price - try multiple sources
+            # Get current price for reference
             current_price = float(self.session_data.get('pre_market_price', 0))
             if current_price == 0:
-                # Try to get from metrics
                 if 'metrics' in self.session_data and 'current_price' in self.session_data['metrics']:
                     current_price = float(self.session_data['metrics']['current_price'])
-            
             if current_price == 0:
-                # Try to get from latest bar
                 current_price = float(data_5min['close'].iloc[-1])
                 logger.info(f"Using latest close price as current price: ${current_price:.2f}")
             
-            confluence_analysis = self.confluence_calculator.calculate(
-                results=confluence_input,
-                current_price=current_price,
-                max_zones=10
-            )
+            # Create placeholder confluence analysis object
+            class PlaceholderConfluenceAnalysis:
+                def __init__(self, current_price):
+                    self.zones = []
+                    self.current_price = current_price
+                    self.total_zones_found = 0
+                    self.nearest_resistance = None
+                    self.nearest_support = None
+                    self.price_in_zone = None
+                    
+                def __str__(self):
+                    return "Confluence analysis not yet implemented"
             
-            logger.info(f"Confluence analysis: Found {len(confluence_analysis.zones)} zones")
+            confluence_analysis = PlaceholderConfluenceAnalysis(current_price)
+            logger.info("Confluence analysis placeholder created - awaiting confluence_engine.py implementation")
+            
+            # ========== END CONFLUENCE PLACEHOLDER ==========
             
             self.progress.emit(70, "Calculating Camarilla pivots...")
             
             # Step 5: Calculate Camarilla pivots
-            # Fetch daily data for Camarilla
+            # Set the analysis date for the Camarilla engine
+            self.camarilla_engine.set_analysis_date(analysis_datetime)
+            
+            camarilla_results = {}
+            
+            # For daily Camarilla, we use 5-minute data (prior trading day 08:00-23:59 UTC)
+            camarilla_results['daily'] = self.camarilla_engine.calculate_from_data(
+                data_5min, 'daily'  # Pass 5-minute data for daily calculations
+            )
+            
+            # For weekly and monthly, fetch daily data
             data_daily = bridge.get_historical_bars(
                 ticker=ticker,
-                start_date=end_date - timedelta(days=60),
+                start_date=end_date - timedelta(days=60),  # Extra buffer for trailing calculations
                 end_date=end_date,
                 timeframe='day'
             )
             
-            camarilla_results = {}
-            
             if not data_daily.empty:
-                logger.info(f"Fetched {len(data_daily)} daily bars for Camarilla")
+                # Ensure UTC timezone
+                data_daily = self._ensure_utc(data_daily)
+                logger.info(f"Fetched {len(data_daily)} daily bars for weekly/monthly Camarilla")
                 
-                # Daily Camarilla
-                camarilla_results['daily'] = self.camarilla_engine.calculate_from_data(
-                    data_daily, 'daily'
+                # Weekly Camarilla (uses trailing 5 days)
+                camarilla_results['weekly'] = self.camarilla_engine.calculate_from_data(
+                    data_daily, 'weekly'
                 )
                 
-                # Weekly Camarilla (resample daily to weekly)
-                data_weekly = data_daily.resample('W').agg({
-                    'open': 'first',
-                    'high': 'max',
-                    'low': 'min',
-                    'close': 'last'
-                }).dropna()
-                
-                if not data_weekly.empty:
-                    camarilla_results['weekly'] = self.camarilla_engine.calculate_from_data(
-                        data_weekly, 'weekly'
-                    )
-                
-                # Monthly Camarilla (resample daily to monthly)
-                data_monthly = data_daily.resample('M').agg({
-                    'open': 'first',
-                    'high': 'max',
-                    'low': 'min',
-                    'close': 'last'
-                }).dropna()
-                
-                if not data_monthly.empty:
-                    camarilla_results['monthly'] = self.camarilla_engine.calculate_from_data(
-                        data_monthly, 'monthly'
-                    )
+                # Monthly Camarilla (uses trailing 30 days)
+                camarilla_results['monthly'] = self.camarilla_engine.calculate_from_data(
+                    data_daily, 'monthly'
+                )
             else:
-                logger.warning("No daily data available for Camarilla calculations")
+                logger.warning("No daily data available for weekly/monthly Camarilla calculations")
             
             self.progress.emit(85, "Calculating ATR metrics...")
             
@@ -265,12 +281,23 @@ class AnalysisThread(QThread):
         metrics = {}
         
         try:
+            # Ensure data is UTC
+            data_5min = self._ensure_utc(data_5min)
+            if not data_daily.empty:
+                data_daily = self._ensure_utc(data_daily)
+            
+            # Ensure analysis_datetime is UTC
+            if analysis_datetime.tzinfo is None:
+                analysis_datetime = pd.Timestamp(analysis_datetime).tz_localize('UTC')
+            else:
+                analysis_datetime = pd.Timestamp(analysis_datetime).tz_convert('UTC')
+            
             # 5-minute ATR
             atr_5min = self._calculate_atr(data_5min, period=14)
             metrics['atr_5min'] = float(atr_5min)
             
             # 10-minute ATR (resample)
-            data_10min = data_5min.resample('10T').agg({
+            data_10min = data_5min.resample('10min').agg({
                 'open': 'first',
                 'high': 'max',
                 'low': 'min',
@@ -281,7 +308,7 @@ class AnalysisThread(QThread):
             metrics['atr_10min'] = float(atr_10min)
             
             # 15-minute ATR (resample)
-            data_15min = data_5min.resample('15T').agg({
+            data_15min = data_5min.resample('15min').agg({
                 'open': 'first',
                 'high': 'max',
                 'low': 'min',
@@ -292,19 +319,23 @@ class AnalysisThread(QThread):
             metrics['atr_15min'] = float(atr_15min)
             
             # Daily ATR
-            daily_atr = self._calculate_atr(data_daily, period=14)
-            metrics['daily_atr'] = float(daily_atr)
+            if not data_daily.empty:
+                daily_atr = self._calculate_atr(data_daily, period=14)
+                metrics['daily_atr'] = float(daily_atr)
+            else:
+                metrics['daily_atr'] = 0.0
             
             # Get current price
             current_price = self._get_price_at_datetime(data_5min, analysis_datetime)
             metrics['current_price'] = float(current_price)
             
             # Calculate ATR bands
-            metrics['atr_high'] = metrics['current_price'] + metrics['daily_atr']
-            metrics['atr_low'] = metrics['current_price'] - metrics['daily_atr']
+            metrics['atr_high'] = metrics['current_price'] + metrics.get('daily_atr', 0)
+            metrics['atr_low'] = metrics['current_price'] - metrics.get('daily_atr', 0)
             
         except Exception as e:
             logger.error(f"Error calculating metrics: {str(e)}")
+            raise
         
         return metrics
     
@@ -329,6 +360,15 @@ class AnalysisThread(QThread):
     
     def _get_price_at_datetime(self, data, target_datetime):
         """Get price at specific datetime"""
+        # Ensure target datetime is timezone-aware in UTC
+        if target_datetime.tzinfo is None:
+            # If naive, assume it's UTC and localize
+            target_datetime = pd.Timestamp(target_datetime).tz_localize('UTC')
+        else:
+            # If already timezone-aware, convert to UTC
+            target_datetime = pd.Timestamp(target_datetime).tz_convert('UTC')
+        
+        # Now both data.index and target_datetime are in UTC
         if target_datetime in data.index:
             return float(data.loc[target_datetime, 'close'])
         
@@ -414,12 +454,11 @@ class AnalysisThread(QThread):
         
         return "\n".join(output)
     
-    # In analysis_thread.py, update _format_confluence_zones (around line 440)
-
     def _format_confluence_zones(self, analysis) -> str:
         """Format confluence zones for display with M15 zone integration"""
-        if not analysis or not analysis.zones:
-            return "No confluence zones identified"
+        if not analysis or not hasattr(analysis, 'zones') or not analysis.zones:
+            return "Confluence analysis pending implementation\n" + \
+                   "HVN and Camarilla results are available separately"
         
         output = []
         output.append(f"HVN CONFLUENCE ANALYSIS")
@@ -428,7 +467,7 @@ class AnalysisThread(QThread):
         output.append(f"Total Zones Found: {analysis.total_zones_found}")
         
         # Price location
-        if analysis.price_in_zone:
+        if hasattr(analysis, 'price_in_zone') and analysis.price_in_zone:
             output.append(f"\n⚠️  Price is IN confluence zone #{analysis.price_in_zone.zone_id}")
             output.append(f"   Zone: ${analysis.price_in_zone.zone_low:.2f} - ${analysis.price_in_zone.zone_high:.2f}")
         

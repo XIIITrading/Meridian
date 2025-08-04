@@ -58,10 +58,10 @@ class DarkTheme:
     # Font settings
     FONT_FAMILY = "Segoe UI"
     FONT_FAMILY_MONO = "Consolas"
-    FONT_SIZE_SMALL = 9
-    FONT_SIZE_NORMAL = 10
-    FONT_SIZE_MEDIUM = 11
-    FONT_SIZE_LARGE = 12
+    FONT_SIZE_SMALL = 11
+    FONT_SIZE_NORMAL = 11
+    FONT_SIZE_MEDIUM = 12
+    FONT_SIZE_LARGE = 13
     FONT_SIZE_XLARGE = 14
     FONT_SIZE_TITLE = 16
 

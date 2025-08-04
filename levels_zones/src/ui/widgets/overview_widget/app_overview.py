@@ -324,17 +324,37 @@ class OverviewWidget(QWidget):
                     if i < len(self.daily_frame.below_levels):
                         self.daily_frame.below_levels[i].setValue(float(level))
         
-        # Load zones
+        # Load zones - UPDATED SECTION
         if 'zones' in session_data and session_data['zones']:
             for row, zone in enumerate(session_data['zones'][:6]):
-                if 'datetime' in zone:
-                    self.zone_table.item(row, 1).setText(zone['datetime'])
+                if 'datetime' in zone and zone['datetime']:
+                    # Split datetime into date and time
+                    datetime_str = zone['datetime']
+                    if 'T' in datetime_str or ' ' in datetime_str:
+                        # Full datetime format
+                        try:
+                            dt = datetime.fromisoformat(datetime_str.replace('Z', '+00:00'))
+                            self.zone_table.item(row, 1).setText(dt.strftime('%Y-%m-%d'))
+                            self.zone_table.item(row, 2).setText(dt.strftime('%H:%M:%S'))
+                        except:
+                            # Fallback: treat as time only
+                            self.zone_table.item(row, 2).setText(datetime_str)
+                    else:
+                        # Just time format (backward compatibility)
+                        self.zone_table.item(row, 2).setText(datetime_str)
+                
+                # Handle separate date/time fields if they exist
+                if 'date' in zone:
+                    self.zone_table.item(row, 1).setText(zone['date'])
+                if 'time' in zone:
+                    self.zone_table.item(row, 2).setText(zone['time'])
+                
                 if 'level' in zone:
-                    self.zone_table.item(row, 2).setText(str(zone['level']))
+                    self.zone_table.item(row, 3).setText(str(zone['level']))
                 if 'high' in zone:
-                    self.zone_table.item(row, 3).setText(str(zone['high']))
+                    self.zone_table.item(row, 4).setText(str(zone['high']))
                 if 'low' in zone:
-                    self.zone_table.item(row, 4).setText(str(zone['low']))
+                    self.zone_table.item(row, 5).setText(str(zone['low']))
         
         # After loading, fetch market data if we have a ticker
         if 'ticker' in session_data:
@@ -382,7 +402,7 @@ class OverviewWidget(QWidget):
         # Clear metrics
         self.metrics_frame.clear_all()
         
-        # Clear table
+        # Clear table - UPDATED FOR NEW COLUMN COUNT
         for row in range(self.zone_table.rowCount()):
             for col in range(1, self.zone_table.columnCount()):
                 if self.zone_table.item(row, col):

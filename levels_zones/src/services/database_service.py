@@ -217,7 +217,7 @@ class DatabaseService(QObject):
                 notes=daily.get('notes', '')
             )
         
-        # Add M15 zones as price levels
+        # Add M15 zones as price levels - UPDATED SECTION
         if data.get('zones'):
             for zone in data['zones']:
                 # Parse zone data
@@ -226,29 +226,59 @@ class DatabaseService(QObject):
                 # Create level_id
                 level_id = session.generate_level_id(len(session.m15_levels))
                 
-                # Parse datetime string (handle different formats)
-                zone_dt_str = zone['datetime']
-                try:
-                    # Try parsing as datetime
-                    zone_datetime = datetime.fromisoformat(zone_dt_str)
-                except:
-                    # If it's just a time, combine with session date
+                # Combine date and time
+                zone_date_str = zone.get('date', '')
+                zone_time_str = zone.get('time', '')
+                
+                # Handle datetime combination
+                if zone_date_str and zone_time_str:
                     try:
-                        time_parts = zone_dt_str.split(':')
-                        hour = int(time_parts[0])
-                        minute = int(time_parts[1]) if len(time_parts) > 1 else 0
-                        zone_datetime = datetime.combine(session_date, 
-                                                       datetime.min.time().replace(hour=hour, minute=minute))
+                        # Parse date and time separately
+                        date_parts = zone_date_str.split('-')
+                        time_parts = zone_time_str.split(':')
+                        
+                        if len(date_parts) == 3 and len(time_parts) >= 2:
+                            year = int(date_parts[0])
+                            month = int(date_parts[1])
+                            day = int(date_parts[2])
+                            hour = int(time_parts[0])
+                            minute = int(time_parts[1])
+                            second = int(time_parts[2]) if len(time_parts) > 2 else 0
+                            
+                            zone_datetime = datetime(year, month, day, hour, minute, second)
+                        else:
+                            # Fallback to session datetime
+                            zone_datetime = session_datetime
                     except:
-                        # Default to session datetime
+                        # If parsing fails, use session datetime
                         zone_datetime = session_datetime
+                elif zone.get('datetime'):
+                    # Handle legacy datetime field for backward compatibility
+                    zone_dt_str = zone['datetime']
+                    try:
+                        # Try parsing as datetime
+                        zone_datetime = datetime.fromisoformat(zone_dt_str)
+                    except:
+                        # If it's just a time, combine with session date
+                        try:
+                            time_parts = zone_dt_str.split(':')
+                            hour = int(time_parts[0])
+                            minute = int(time_parts[1]) if len(time_parts) > 1 else 0
+                            zone_datetime = datetime.combine(session_date, 
+                                                           datetime.min.time().replace(hour=hour, minute=minute))
+                        except:
+                            # Default to session datetime
+                            zone_datetime = session_datetime
+                else:
+                    # Default to session datetime if no date/time provided
+                    zone_datetime = session_datetime
                 
                 # Create price level
                 level = PriceLevel(
-                    line_price=Decimal(str(zone['level'])),
+                    line_price=Decimal(str(zone['level'])) if zone.get('level') else Decimal("0"),
                     candle_datetime=zone_datetime,
-                    candle_high=Decimal(str(zone['high'])),
-                    candle_low=Decimal(str(zone['low'])),
+                    candle_high=Decimal(str(zone['high'])) if zone.get('high') else Decimal("0"),
+                    candle_low=Decimal(str(zone['low'])) if zone.get('low') else Decimal("0"),
                     level_id=level_id
                 )
                 
@@ -286,12 +316,13 @@ class DatabaseService(QObject):
                 'notes': session.daily_data.notes
             }
         
-        # Add M15 zones
+        # Add M15 zones - UPDATED SECTION
         zones = []
         for i, level in enumerate(session.m15_levels):
             zone = {
                 'zone_number': i + 1,
-                'datetime': level.candle_datetime.strftime('%H:%M'),
+                'date': level.candle_datetime.strftime('%Y-%m-%d'),
+                'time': level.candle_datetime.strftime('%H:%M:%S'),
                 'level': str(level.line_price),
                 'high': str(level.candle_high),
                 'low': str(level.candle_low)

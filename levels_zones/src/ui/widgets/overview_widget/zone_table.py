@@ -16,7 +16,7 @@ class M15ZoneTable(QTableWidget):
     """Table for M15 zone data entry"""
     
     def __init__(self):
-        super().__init__(6, 5)  # 6 rows, 5 columns
+        super().__init__(6, 6)  # 6 rows, 6 columns (increased from 5)
         self.setStyleSheet(DarkStyleSheets.TABLE)
         self._init_table()
         
@@ -28,7 +28,7 @@ class M15ZoneTable(QTableWidget):
         
     def _init_table(self):
         # Set headers
-        headers = ["Zone", "Candlestick DateTime", "Level", "Zone High", "Zone Low"]
+        headers = ["Zone", "Date", "Time", "Level", "Zone High", "Zone Low"]
         self.setHorizontalHeaderLabels(headers)
         
         # Hide vertical header (row numbers)
@@ -41,6 +41,7 @@ class M15ZoneTable(QTableWidget):
         header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
         header.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
         header.setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(5, QHeaderView.ResizeMode.Stretch)
         
         self.setColumnWidth(0, 50)
         
@@ -58,20 +59,60 @@ class M15ZoneTable(QTableWidget):
             self.setItem(row, 0, zone_item)
             
             # Initialize other cells
-            for col in range(1, 5):
+            for col in range(1, 6):  # Updated from range(1, 5)
                 item = QTableWidgetItem("")
+                # Set light gray text as hint for date and time columns
+                if col == 1:  # Date column
+                    item.setForeground(QColor(DarkTheme.TEXT_PLACEHOLDER))
+                    item.setText("yyyy-mm-dd")
+                elif col == 2:  # Time column
+                    item.setForeground(QColor(DarkTheme.TEXT_PLACEHOLDER))
+                    item.setText("hh:mm:ss")
                 self.setItem(row, col, item)
+        
+        # Connect itemChanged to clear placeholder text when user starts typing
+        self.itemChanged.connect(self._on_item_changed)
+    
+    def _on_item_changed(self, item):
+        """Clear placeholder text and restore normal color when user edits"""
+        row = item.row()
+        col = item.column()
+        text = item.text()
+        
+        # For date column
+        if col == 1 and text and text != "yyyy-mm-dd":
+            item.setForeground(QColor(DarkTheme.TEXT_PRIMARY))
+        elif col == 1 and not text:
+            item.setForeground(QColor(DarkTheme.TEXT_PLACEHOLDER))
+            item.setText("yyyy-mm-dd")
+            
+        # For time column
+        if col == 2 and text and text != "hh:mm:ss":
+            item.setForeground(QColor(DarkTheme.TEXT_PRIMARY))
+        elif col == 2 and not text:
+            item.setForeground(QColor(DarkTheme.TEXT_PLACEHOLDER))
+            item.setText("hh:mm:ss")
     
     def get_zone_data(self):
         """Get all zone data from the table"""
         zones = []
         for row in range(self.rowCount()):
+            # Get text, but ignore placeholder text
+            date_text = self.item(row, 1).text() if self.item(row, 1) else ""
+            if date_text == "yyyy-mm-dd":
+                date_text = ""
+                
+            time_text = self.item(row, 2).text() if self.item(row, 2) else ""
+            if time_text == "hh:mm:ss":
+                time_text = ""
+            
             zone_data = {
                 'zone_number': row + 1,
-                'datetime': self.item(row, 1).text() if self.item(row, 1) else "",
-                'level': self.item(row, 2).text() if self.item(row, 2) else "",
-                'high': self.item(row, 3).text() if self.item(row, 3) else "",
-                'low': self.item(row, 4).text() if self.item(row, 4) else "",
+                'date': date_text,
+                'time': time_text,
+                'level': self.item(row, 3).text() if self.item(row, 3) else "",
+                'high': self.item(row, 4).text() if self.item(row, 4) else "",
+                'low': self.item(row, 5).text() if self.item(row, 5) else "",
             }
             zones.append(zone_data)
         return zones

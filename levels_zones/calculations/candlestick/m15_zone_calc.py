@@ -1,5 +1,5 @@
 """
-Fixed M15 Zone Calculator with workaround for PolygonBridge date issue
+Corrected M15 Zone Calculator 
 Location: levels_zones/calculations/candlestick/m15_zone_calc.py
 """
 
@@ -7,7 +7,7 @@ import logging
 from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Optional, Dict, List, Tuple
-import pytz
+import pandas as pd
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -51,127 +51,112 @@ class M15ZoneCalculator:
             
             # Combine into UTC datetime
             zone_datetime = datetime.combine(date_obj, time_obj)
-            zone_datetime = pytz.UTC.localize(zone_datetime)
             
             logger.info(f"Fetching M15 candle for {ticker} at {zone_datetime} UTC")
             
-            # WORKAROUND: Since get_historical_bars has date issues, let's try different approaches
-            
-            # Method 1: Try to get the candle directly if the bridge has this method
-            if hasattr(self.bridge, 'get_candle_at_datetime'):
-                try:
-                    # Try using the next day as end_date to avoid the date equality issue
-                    next_day = date_obj + timedelta(days=1)
-                    
-                    # Call with modified parameters
-                    candle = self.bridge.get_candle_at_datetime(ticker, zone_datetime)
-                    
-                    if candle and isinstance(candle, dict):
-                        high = Decimal(str(candle.get('h', candle.get('high', 0))))
-                        low = Decimal(str(candle.get('l', candle.get('low', 0))))
-                        
-                        if high > 0 and low > 0:
-                            return {
-                                'high': high,
-                                'low': low,
-                                'mid': (high + low) / 2,
-                                'open': Decimal(str(candle.get('o', candle.get('open', 0)))),
-                                'close': Decimal(str(candle.get('c', candle.get('close', 0)))),
-                                'volume': candle.get('v', candle.get('volume', 0)),
-                                'timestamp': zone_datetime.isoformat()
-                            }
-                except Exception as e:
-                    logger.error(f"get_candle_at_datetime failed: {e}")
-            
-            # Method 2: Try with date range spanning to next day
+            # Method 1: Use direct date range approach (most reliable)
             try:
-                # Use previous day to next day to ensure we get data
-                prev_day = date_obj - timedelta(days=1)
-                next_day = date_obj + timedelta(days=1)
+                # Calculate date range with buffer to avoid same-date issues
+                start_date = date_obj - timedelta(days=1)  # Previous day
+                end_date = date_obj + timedelta(days=1)    # Next day
                 
-                bars = self.bridge.get_historical_bars(
+                logger.debug(f"Using date range: {start_date} to {end_date}")
+                
+                df = self.bridge.get_historical_bars(
                     ticker=ticker,
-                    start_date=prev_day,
-                    end_date=next_day,
+                    start_date=start_date,
+                    end_date=end_date,
                     timeframe='15min'
                 )
                 
-                # Process the bars
-                if hasattr(bars, 'empty') and not bars.empty:
-                    bars_list = bars.to_dict('records') if hasattr(bars, 'to_dict') else bars
-                elif isinstance(bars, list):
-                    bars_list = bars
-                else:
-                    bars_list = []
-                
-                # Find the candle at our target time with improved matching
-                target_timestamp = int(zone_datetime.timestamp() * 1000)
-                
-                best_match = None
-                best_time_diff = float('inf')
-                
-                for bar in bars_list:
-                    bar_time = bar.get('t', bar.get('timestamp', 0))
-                    time_diff = abs(bar_time - target_timestamp)
+                if df is not None and not df.empty:
+                    # Find the closest candle to our target time
+                    target_time = pd.Timestamp(zone_datetime).tz_localize('UTC')
                     
-                    # If this bar is within 15 minutes and closer than previous matches
-                    if time_diff < 900000 and time_diff < best_time_diff:
-                        best_match = bar
-                        best_time_diff = time_diff
+                    # Ensure DataFrame index is timezone-aware
+                    if df.index.tz is None:
+                        df.index = df.index.tz_localize('UTC')
+                    elif df.index.tz != pd.Timestamp.now().tz:
+                        df.index = df.index.tz_convert('UTC')
+                    
+                    # Find nearest candle (within 15 minutes)
+                    time_diffs = abs(df.index - target_time)
+                    min_diff_idx = time_diffs.argmin()
+                    min_diff = time_diffs.iloc[min_diff_idx]
+                    
+                    # Only accept if within 15 minutes (900 seconds)
+                    if min_diff <= pd.Timedelta(minutes=15):
+                        nearest_candle = df.iloc[min_diff_idx]
+                        actual_time = df.index[min_diff_idx]
                         
-                        # If we find an exact match (within 1 second), use it immediately
-                        if time_diff < 1000:
-                            break
-                
-                if best_match:
-                    bar = best_match
-                    high = Decimal(str(bar.get('h', bar.get('high', 0))))
-                    low = Decimal(str(bar.get('l', bar.get('low', 0))))
-                    
-                    if high > 0 and low > 0:
-                        # Log the actual vs requested time
-                        actual_time = datetime.fromtimestamp(bar.get('t', 0) / 1000, tz=pytz.UTC)
-                        logger.info(f"Found candle via date range method (requested: {zone_datetime}, actual: {actual_time})")
+                        logger.info(f"Found candle (requested: {zone_datetime}, actual: {actual_time})")
                         
                         return {
-                            'high': high,
-                            'low': low,
-                            'mid': (high + low) / 2,
-                            'open': Decimal(str(bar.get('o', bar.get('open', 0)))),
-                            'close': Decimal(str(bar.get('c', bar.get('close', 0)))),
-                            'volume': bar.get('v', bar.get('volume', 0)),
+                            'high': Decimal(str(nearest_candle['high'])),
+                            'low': Decimal(str(nearest_candle['low'])),
+                            'mid': (Decimal(str(nearest_candle['high'])) + Decimal(str(nearest_candle['low']))) / 2,
+                            'open': Decimal(str(nearest_candle['open'])),
+                            'close': Decimal(str(nearest_candle['close'])),
+                            'volume': int(nearest_candle['volume']),
                             'timestamp': zone_datetime.isoformat(),
                             'actual_timestamp': actual_time.isoformat()
                         }
+                    else:
+                        logger.warning(f"Nearest candle is {min_diff} away, too far from target")
                 
             except Exception as e:
                 logger.error(f"Date range method failed: {e}")
             
-            # Method 3: Last resort - use price estimation
+            # Method 2: Try the bridge's get_candle_at_datetime method (if available)
+            if hasattr(self.bridge, 'get_candle_at_datetime'):
+                try:
+                    candle = self.bridge.get_candle_at_datetime(ticker, zone_datetime, '15min')
+                    
+                    if candle and isinstance(candle, dict):
+                        high = Decimal(str(candle.get('high', 0)))
+                        low = Decimal(str(candle.get('low', 0)))
+                        
+                        if high > 0 and low > 0:
+                            logger.info(f"Found candle via get_candle_at_datetime")
+                            return {
+                                'high': high,
+                                'low': low,
+                                'mid': (high + low) / 2,
+                                'open': Decimal(str(candle.get('open', 0))),
+                                'close': Decimal(str(candle.get('close', 0))),
+                                'volume': candle.get('volume', 0),
+                                'timestamp': zone_datetime.isoformat()
+                            }
+                            
+                except Exception as e:
+                    logger.error(f"get_candle_at_datetime failed: {e}")
+            
+            # Method 3: Last resort - price estimation
             try:
-                price = self.bridge.get_price_at_datetime(ticker, zone_datetime)
-                if price and price > 0:
-                    price_decimal = Decimal(str(price))
-                    
-                    # For 15-minute bars, typical spread is 0.1-0.3% for liquid stocks
-                    # We'll use 0.15% as a reasonable estimate
-                    spread_pct = Decimal('0.0015')
-                    spread = price_decimal * spread_pct
-                    
-                    logger.info(f"Using price estimate for {ticker} at {zone_datetime}: ${price}")
-                    
-                    return {
-                        'high': price_decimal + spread,
-                        'low': price_decimal - spread,
-                        'mid': price_decimal,
-                        'open': price_decimal,
-                        'close': price_decimal,
-                        'volume': 0,
-                        'timestamp': zone_datetime.isoformat(),
-                        'estimated': True
-                    }
+                if hasattr(self.bridge, 'get_price_at_datetime'):
+                    price = self.bridge.get_price_at_datetime(ticker, zone_datetime, '15min')
+                    if price and price > 0:
+                        price_decimal = Decimal(str(price))
+                        
+                        # Use 0.15% spread for estimation
+                        spread_pct = Decimal('0.0015')
+                        spread = price_decimal * spread_pct
+                        
+                        logger.info(f"Using price estimate for {ticker} at {zone_datetime}: ${price}")
+                        
+                        return {
+                            'high': price_decimal + spread,
+                            'low': price_decimal - spread,
+                            'mid': price_decimal,
+                            'open': price_decimal,
+                            'close': price_decimal,
+                            'volume': 0,
+                            'timestamp': zone_datetime.isoformat(),
+                            'estimated': True
+                        }
+                        
             except Exception as e:
-                logger.error(f"Price estimation also failed: {e}")
+                logger.error(f"Price estimation failed: {e}")
             
             logger.warning(f"No candle data found for {ticker} at {zone_datetime}")
             return None
@@ -220,32 +205,3 @@ class M15ZoneCalculator:
                 logger.warning(f"Zone {idx + 1}: No candle data found")
         
         return results
-    
-    def validate_market_hours(self, zone_datetime: datetime) -> Tuple[bool, str]:
-        """
-        Validate if the datetime is within market hours
-        
-        Args:
-            zone_datetime: Datetime to validate (should be UTC)
-            
-        Returns:
-            Tuple of (is_valid, market_session)
-        """
-        hour = zone_datetime.hour
-        minute = zone_datetime.minute
-        time_minutes = hour * 60 + minute
-        
-        # Pre-market: 4:00 AM - 9:30 AM ET (8:00 - 13:30 UTC)
-        if 480 <= time_minutes < 810:  # 8:00 - 13:30 UTC
-            return True, "Pre-market"
-        
-        # Regular market: 9:30 AM - 4:00 PM ET (13:30 - 20:00 UTC)  
-        elif 810 <= time_minutes < 1200:  # 13:30 - 20:00 UTC
-            return True, "Regular"
-        
-        # After-hours: 4:00 PM - 8:00 PM ET (20:00 - 00:00 UTC)
-        elif 1200 <= time_minutes <= 1440:  # 20:00 - 24:00 UTC
-            return True, "After-hours"
-        
-        else:
-            return False, "Closed"

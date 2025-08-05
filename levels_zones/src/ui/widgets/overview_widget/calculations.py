@@ -83,11 +83,11 @@ class CalculationsDisplay(QWidget):
         layout.addWidget(label)
         
         text_area = QTextEdit()
-        text_area.setStyleSheet(DarkStyleSheets.TEXT_AREA)
+        text_area.setStyleSheet(DarkStyleSheets.CALCULATION_TEXT_AREA)  # Changed this line
         text_area.setMinimumHeight(120)
         text_area.setReadOnly(True)
         layout.addWidget(text_area)
         
         frame.setLayout(layout)
-        frame.text_area = text_area  # Store reference for access
+        frame.text_area = text_area
         return frame

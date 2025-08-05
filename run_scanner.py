@@ -1,33 +1,68 @@
 #!/usr/bin/env python
 """
-Market Scanner Runner - Quick access to market scans including gap scans.
-Place this in your root directory.
+Quick scanner runner with default settings.
+Runs SP500 scan with relaxed profile, outputs to both console and Supabase.
 """
+import subprocess
 import sys
 import os
-import argparse
-
-# Add the current directory to Python path
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from pathlib import Path
 
 def main():
-    # Check if user wants the gap scanner shortcut
-    if len(sys.argv) > 1 and sys.argv[1] in ['gap', 'gaps', 'gapper']:
-        print("Launching Gap Scanner...")
-        # Remove the 'gap' argument and add gap-specific defaults
-        sys.argv.pop(1)
-        
-        # If no other arguments, default to gap_up scan of all equities
-        if len(sys.argv) == 1:
-            sys.argv.extend(['--profile', 'gap_up', '--list', 'all'])
-        
-        # Import and run the scanner
-        from market_scanner.scripts.run_scan import main as run_scan
-        return run_scan()
+    """Run the market scanner with default settings."""
     
-    # Otherwise, run normal scanner
-    from market_scanner.scripts.run_scan import main as run_scan
-    return run_scan()
+    # Get the directory where this script is located (root directory)
+    root_dir = Path(__file__).parent
+    
+    # Change to the root directory
+    os.chdir(root_dir)
+    
+    # Define the command to run
+    cmd = [
+        sys.executable,  # Use the same Python interpreter
+        "market_scanner/scripts/run_scan.py",
+        "--list", "sp500",
+        "--profile", "relaxed", 
+        "--output", "console", "supabase",  # Show in terminal AND push to Supabase
+        "--top", "10"
+    ]
+    
+    print("🚀 Starting Market Scanner...")
+    print("=" * 60)
+    print("Settings:")
+    print("  • List: S&P 500")  
+    print("  • Profile: Relaxed")
+    print("  • Output: Console + Supabase")
+    print("  • Top Results: 10")
+    print("=" * 60)
+    print()
+    
+    try:
+        # Run the scanner
+        result = subprocess.run(cmd, check=True)
+        
+        print("\n" + "=" * 60)
+        print("✅ Scanner completed successfully!")
+        print("📊 Check your Supabase dashboard for the data")
+        print("=" * 60)
+        
+        return result.returncode
+        
+    except subprocess.CalledProcessError as e:
+        print(f"\n❌ Scanner failed with error code: {e.returncode}")
+        return e.returncode
+    except KeyboardInterrupt:
+        print("\n\n⚠️  Scanner interrupted by user")
+        return 1
+    except Exception as e:
+        print(f"\n❌ Unexpected error: {e}")
+        return 1
 
 if __name__ == "__main__":
-    sys.exit(main())
+    exit_code = main()
+    
+    # Keep window open on Windows if run by double-clicking
+    if os.name == 'nt' and not sys.stdin.isatty():
+        input("\nPress Enter to exit...")
+    
+    sys.exit(exit_code)

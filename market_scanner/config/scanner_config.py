@@ -6,6 +6,16 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
+# Load environment variables from .env file
+try:
+    from dotenv import load_dotenv
+    # Look for .env file in the project root (parent of market_scanner)
+    env_path = Path(__file__).parent.parent.parent / ".env"
+    load_dotenv(env_path)
+except ImportError:
+    # dotenv not installed, that's okay - will use system env vars
+    pass
+
 @dataclass
 class ScannerConfig:
     """Global configuration for market scanner."""

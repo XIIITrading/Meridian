@@ -159,9 +159,16 @@ class OverviewWidget(QWidget):
         """)
         zones_ranked_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         container_layout.addWidget(zones_ranked_label)
-        
+
         self.zones_ranked = QTextEdit()
-        self.zones_ranked.setStyleSheet(DarkStyleSheets.TEXT_AREA)
+        # Apply larger font size to zones ranked text area
+        zones_ranked_style = DarkStyleSheets.TEXT_AREA + """
+            QTextEdit {
+                font-size: 14px;
+                line-height: 1.4;
+            }
+        """
+        self.zones_ranked.setStyleSheet(zones_ranked_style)
         self.zones_ranked.setPlaceholderText("M15 Zones Confluence Ranking will appear here after analysis...")
         self.zones_ranked.setMinimumHeight(200)
         self.zones_ranked.setReadOnly(True)

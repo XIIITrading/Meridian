@@ -465,24 +465,20 @@ class PolygonBridge:
             return None
     
     def get_candle_at_datetime(self, 
-                              symbol: str,
-                              target_datetime: datetime,
-                              timeframe: str = '15min') -> Optional[Dict[str, Any]]:
-        """
-        Get full candle data at a specific datetime.
-        
-        Args:
-            symbol: Stock ticker symbol
-            target_datetime: Target datetime
-            timeframe: Timeframe for data
-            
-        Returns:
-            Dictionary with OHLC data or None
-        """
+                          symbol: str,
+                          target_datetime: datetime,
+                          timeframe: str = '15min') -> Optional[Dict[str, Any]]:
+        """Get full candle data at a specific datetime."""
         try:
-            # Fetch data around the target time
+            # Calculate date range - FIXED VERSION
+            target_date = target_datetime.date()
             start_date = (target_datetime - timedelta(hours=4)).strftime('%Y-%m-%d')
             end_date = target_datetime.strftime('%Y-%m-%d')
+            
+            # FIX: If same day, extend end date to next day
+            if start_date == end_date:
+                end_date = (target_date + timedelta(days=1)).strftime('%Y-%m-%d')
+                logger.debug(f"Adjusted date range to avoid same-day error: {start_date} to {end_date}")
             
             df = self.fetch_bars(
                 symbol=symbol,

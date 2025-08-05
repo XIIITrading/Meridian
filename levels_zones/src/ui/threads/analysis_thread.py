@@ -1,5 +1,5 @@
 """
-Worker thread for running analysis calculations with HVN integration
+Worker thread for running analysis calculations with HVN integration and Confluence Engine
 """
 
 import sys
@@ -20,6 +20,7 @@ from calculations.volume.hvn_engine import HVNEngine
 from calculations.confluence.hvn_confluence import HVNConfluenceCalculator
 from calculations.pivots.camarilla_engine import CamarillaEngine
 from calculations.confluence.camarilla_confluence import CamarillaConfluenceCalculator
+from calculations.confluence.confluence_engine import ConfluenceEngine
 from data.polygon_bridge import PolygonBridge
 
 # Set up logging
@@ -27,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 
 class AnalysisThread(QThread):
-    """Worker thread for running analysis calculations with HVN integration"""
+    """Worker thread for running analysis calculations with HVN integration and Confluence Engine"""
     
     # Signals
     progress = pyqtSignal(int, str)  # Progress percentage and message
@@ -42,6 +43,7 @@ class AnalysisThread(QThread):
         self.confluence_calculator = HVNConfluenceCalculator()
         self.camarilla_engine = CamarillaEngine()
         self.camarilla_confluence = CamarillaConfluenceCalculator()
+        self.confluence_engine = ConfluenceEngine()
         
     def _ensure_utc(self, df: pd.DataFrame) -> pd.DataFrame:
         """Ensure DataFrame has UTC timezone"""
@@ -157,47 +159,9 @@ class AnalysisThread(QThread):
                 logger.error(f"Error in HVN calculations: {e}")
                 raise
             
-            self.progress.emit(60, "Preparing confluence analysis...")
+            self.progress.emit(60, "Calculating Camarilla pivots...")
             
-            # Step 4: Calculate HVN confluence - PLACEHOLDER FOR FUTURE IMPLEMENTATION
-            # ========== CONFLUENCE PLACEHOLDER ==========
-            # TODO: Integrate confluence_engine.py when available
-            # Expected interface:
-            # confluence_analysis = self.confluence_calculator.analyze(
-            #     hvn_results=hvn_results,
-            #     current_price=current_price
-            # )
-            
-            # Get current price for reference
-            current_price = float(self.session_data.get('pre_market_price', 0))
-            if current_price == 0:
-                if 'metrics' in self.session_data and 'current_price' in self.session_data['metrics']:
-                    current_price = float(self.session_data['metrics']['current_price'])
-            if current_price == 0:
-                current_price = float(data_5min['close'].iloc[-1])
-                logger.info(f"Using latest close price as current price: ${current_price:.2f}")
-            
-            # Create placeholder confluence analysis object
-            class PlaceholderConfluenceAnalysis:
-                def __init__(self, current_price):
-                    self.zones = []
-                    self.current_price = current_price
-                    self.total_zones_found = 0
-                    self.nearest_resistance = None
-                    self.nearest_support = None
-                    self.price_in_zone = None
-                    
-                def __str__(self):
-                    return "Confluence analysis not yet implemented"
-            
-            confluence_analysis = PlaceholderConfluenceAnalysis(current_price)
-            logger.info("Confluence analysis placeholder created - awaiting confluence_engine.py implementation")
-            
-            # ========== END CONFLUENCE PLACEHOLDER ==========
-            
-            self.progress.emit(70, "Calculating Camarilla pivots...")
-            
-            # Step 5: Calculate Camarilla pivots
+            # Step 4: Calculate Camarilla pivots
             # Set the analysis date for the Camarilla engine
             self.camarilla_engine.set_analysis_date(analysis_datetime)
             
@@ -233,10 +197,19 @@ class AnalysisThread(QThread):
             else:
                 logger.warning("No daily data available for weekly/monthly Camarilla calculations")
             
-            self.progress.emit(85, "Calculating ATR metrics...")
+            self.progress.emit(70, "Calculating ATR metrics...")
             
-            # Step 6: Calculate ATR metrics
+            # Step 5: Calculate ATR metrics
             metrics = self._calculate_metrics(data_5min, data_daily, analysis_datetime)
+            
+            # Get current price for reference
+            current_price = float(self.session_data.get('pre_market_price', 0))
+            if current_price == 0:
+                if 'metrics' in self.session_data and 'current_price' in self.session_data['metrics']:
+                    current_price = float(self.session_data['metrics']['current_price'])
+            if current_price == 0:
+                current_price = float(data_5min['close'].iloc[-1])
+                logger.info(f"Using latest close price as current price: ${current_price:.2f}")
             
             # Store current price in metrics for formatter
             metrics['analysis_current_price'] = current_price
@@ -245,6 +218,50 @@ class AnalysisThread(QThread):
             metrics['hvn_7day_count'] = len(hvn_results.get('7day', {}).peaks) if hvn_results.get('7day') else 0
             metrics['hvn_14day_count'] = len(hvn_results.get('14day', {}).peaks) if hvn_results.get('14day') else 0
             metrics['hvn_30day_count'] = len(hvn_results.get('30day', {}).peaks) if hvn_results.get('30day') else 0
+            
+            self.progress.emit(80, "Calculating confluence analysis...")
+            
+            # Step 6: Run Confluence Analysis - REAL IMPLEMENTATION
+            try:
+                # Transform HVN results to expected format (map string keys to int keys)
+                hvn_results_mapped = {}
+                if '7day' in hvn_results and hvn_results['7day']:
+                    hvn_results_mapped[7] = hvn_results['7day']
+                if '14day' in hvn_results and hvn_results['14day']:
+                    hvn_results_mapped[14] = hvn_results['14day']
+                if '30day' in hvn_results and hvn_results['30day']:
+                    hvn_results_mapped[30] = hvn_results['30day']
+                
+                # Extract M15 zones from session data
+                m15_zones = self.session_data.get('zones', [])
+                
+                # Extract daily price levels (6 levels: 3 above, 3 below)
+                daily_levels = []
+                if 'daily' in self.session_data and 'price_levels' in self.session_data['daily']:
+                    daily_levels = [float(level) for level in self.session_data['daily']['price_levels'] if level and float(level) > 0]
+                
+                # Run confluence calculation
+                confluence_results = self.confluence_engine.calculate_confluence(
+                    m15_zones=m15_zones,
+                    hvn_results=hvn_results_mapped,
+                    camarilla_results=camarilla_results,
+                    daily_levels=daily_levels,
+                    metrics=metrics
+                )
+                
+                logger.info(f"Confluence analysis complete: {confluence_results.zones_with_confluence}/{len(confluence_results.zone_scores)} zones have confluence")
+                
+            except Exception as e:
+                logger.error(f"Error in confluence calculations: {e}")
+                # Fall back to placeholder if confluence fails
+                class FallbackConfluenceResults:
+                    def __init__(self):
+                        self.zone_scores = []
+                        self.total_inputs_checked = 0
+                        self.zones_with_confluence = 0
+                
+                confluence_results = FallbackConfluenceResults()
+                logger.warning("Using fallback confluence results due to error")
             
             self.progress.emit(95, "Formatting results...")
             
@@ -261,8 +278,8 @@ class AnalysisThread(QThread):
                 'cam_daily': self._format_camarilla_result(camarilla_results.get('daily')),
                 'cam_weekly': self._format_camarilla_result(camarilla_results.get('weekly')),
                 'cam_monthly': self._format_camarilla_result(camarilla_results.get('monthly')),
-                'zones_ranked': self._format_confluence_zones(confluence_analysis),
-                'confluence_analysis': confluence_analysis,
+                'zones_ranked': self._format_confluence_zones(confluence_results, current_price),
+                'confluence_results': confluence_results,  # Store raw confluence results
                 'raw_hvn_results': hvn_results,
                 'raw_camarilla_results': camarilla_results,
                 'current_price': current_price  # Include for reference
@@ -454,71 +471,11 @@ class AnalysisThread(QThread):
         
         return "\n".join(output)
     
-    def _format_confluence_zones(self, analysis) -> str:
-        """Format confluence zones for display with M15 zone integration"""
-        if not analysis or not hasattr(analysis, 'zones') or not analysis.zones:
-            return "Confluence analysis pending implementation\n" + \
+    def _format_confluence_zones(self, confluence_results, current_price: float) -> str:
+        """Format confluence zones for display using the confluence engine's formatter"""
+        if not confluence_results or not hasattr(confluence_results, 'zone_scores'):
+            return "Confluence analysis could not be completed\n" + \
                    "HVN and Camarilla results are available separately"
         
-        output = []
-        output.append(f"HVN CONFLUENCE ANALYSIS")
-        output.append(f"=" * 50)
-        output.append(f"Current Price: ${analysis.current_price:.2f}")
-        output.append(f"Total Zones Found: {analysis.total_zones_found}")
-        
-        # Price location
-        if hasattr(analysis, 'price_in_zone') and analysis.price_in_zone:
-            output.append(f"\n⚠️  Price is IN confluence zone #{analysis.price_in_zone.zone_id}")
-            output.append(f"   Zone: ${analysis.price_in_zone.zone_low:.2f} - ${analysis.price_in_zone.zone_high:.2f}")
-        
-        # Nearest zones
-        if analysis.nearest_resistance:
-            output.append(f"\n↑ Nearest Resistance Zone: ${analysis.nearest_resistance.center_price:.2f}")
-            output.append(f"  Distance: {analysis.nearest_resistance.distance_percentage:.1f}%")
-        
-        if analysis.nearest_support:
-            output.append(f"\n↓ Nearest Support Zone: ${analysis.nearest_support.center_price:.2f}")
-            output.append(f"  Distance: {analysis.nearest_support.distance_percentage:.1f}%")
-        
-        output.append("\nTop Confluence Zones (Ranked by Strength):")
-        output.append(f"{'Zone':<6} {'Center':<10} {'Width':<8} {'Strength':<10} {'TFs':<15}")
-        output.append("-" * 60)
-        
-        for zone in analysis.zones[:10]:  # Top 10 zones
-            tf_str = ','.join(f"{tf}d" for tf in sorted(zone.timeframes))
-            width_pct = (zone.zone_width / zone.center_price) * 100
-            
-            # Direction indicator
-            if zone.contains_price(analysis.current_price):
-                direction = " ← NOW"
-            elif zone.center_price > analysis.current_price:
-                direction = " ↑"
-            else:
-                direction = " ↓"
-            
-            output.append(
-                f"#{zone.zone_id:<5} ${zone.center_price:<9.2f} {width_pct:<7.2f}% "
-                f"{zone.strength:<10} {tf_str:<15}{direction}"
-            )
-        
-        # Add M15 zone correlation if available
-        if hasattr(self, 'session_data') and 'zones' in self.session_data:
-            m15_zones = self.session_data.get('zones', [])
-            valid_m15_zones = [z for z in m15_zones if z.get('level') and float(z.get('level', 0)) > 0]
-            
-            if valid_m15_zones:
-                output.append(f"\nM15 Zone Correlations:")
-                
-                for m15_zone in valid_m15_zones:
-                    level = float(m15_zone.get('level', 0))
-                    if level > 0:
-                        # Find if this M15 level is near any confluence zone
-                        for conf_zone in analysis.zones[:5]:  # Check top 5 confluence zones
-                            if conf_zone.zone_low <= level <= conf_zone.zone_high:
-                                output.append(
-                                    f"  M15 Zone {m15_zone['zone_number']} @ ${level:.2f} "
-                                    f"→ IN Confluence Zone #{conf_zone.zone_id} ({conf_zone.strength})"
-                                )
-                                break
-        
-        return "\n".join(output)
+        # Use the confluence engine's built-in formatter
+        return self.confluence_engine.format_confluence_result(confluence_results, current_price)

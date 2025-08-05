@@ -49,19 +49,21 @@ class SupabaseExporter:
             # Format scan date for database
             scan_date_str = scan_date.strftime('%Y-%m-%d')
             
-            # Check for existing records
-            existing = supabase.table('premarket_scans').select('ticker').eq('scan_date', scan_date_str).execute()
-            
-            if existing.data:
-                logger.info(f"Deleting {len(existing.data)} existing records for {scan_date_str}")
-                supabase.table('premarket_scans').delete().eq('scan_date', scan_date_str).execute()
+            # Check for existing records for this date and delete them
+            try:
+                existing = supabase.table('premarket_scans').select('id').eq('scan_date', scan_date_str).execute()
+                if existing.data:
+                    logger.info(f"Deleting {len(existing.data)} existing records for {scan_date_str}")
+                    supabase.table('premarket_scans').delete().eq('scan_date', scan_date_str).execute()
+            except Exception as e:
+                logger.warning(f"Could not check/delete existing records: {e}")
             
             # Prepare records
             records = []
             for _, row in scan_results.iterrows():
                 record = {
-                    'ticker': row['ticker'],
-                    'ticker_list': row.get('ticker_list', 'sp500'),
+                    'ticker': str(row['ticker']),
+                    'ticker_list': str(row.get('ticker_list', 'sp500')),
                     'price': float(row['price']),
                     'rank': int(row['rank']),
                     'premarket_volume': int(row['premarket_volume']),
@@ -78,21 +80,82 @@ class SupabaseExporter:
                     'scan_date': scan_date_str,
                     'scan_time': row['scan_time'].isoformat() if pd.notna(row.get('scan_time')) else None,
                     'passed_filters': True,
-                    'market_session': 'pre-market'
+                    'market_session': 'pre-market',
+                    'active': True  # Mark current scan as active
                 }
+                
+                # Add optional fields if they exist
+                if 'previous_close' in row and pd.notna(row['previous_close']):
+                    record['previous_close'] = float(row['previous_close'])
+                
+                if 'gap_percent' in row and pd.notna(row['gap_percent']):
+                    record['gap_percent'] = float(row['gap_percent'])
+                
+                if 'gap_magnitude_score' in row and pd.notna(row['gap_magnitude_score']):
+                    record['gap_magnitude_score'] = float(row['gap_magnitude_score'])
+                
+                if 'market_cap' in row and pd.notna(row['market_cap']):
+                    record['market_cap'] = int(float(row['market_cap']))
+                
+                if 'fetch_time' in row and pd.notna(row['fetch_time']):
+                    if hasattr(row['fetch_time'], 'isoformat'):
+                        record['fetch_time'] = row['fetch_time'].isoformat()
+                    else:
+                        record['fetch_time'] = str(row['fetch_time'])
+                
                 records.append(record)
             
-            # Insert in batches
+            # First, mark all previous records as inactive
+            try:
+                supabase.table('premarket_scans').update({'active': False}).eq('scan_date', scan_date_str).execute()
+            except:
+                pass  # OK if this fails, might not have previous records
+            
+            # Insert new records in batches
             batch_size = 100
+            total_inserted = 0
+            
             for i in range(0, len(records), batch_size):
                 batch = records[i:i + batch_size]
-                supabase.table('premarket_scans').insert(batch).execute()
+                try:
+                    result = supabase.table('premarket_scans').insert(batch).execute()
+                    if result.data:
+                        total_inserted += len(result.data)
+                    logger.debug(f"Inserted batch {i//batch_size + 1}: {len(batch)} records")
+                except Exception as e:
+                    logger.error(f"Failed to insert batch {i//batch_size + 1}: {e}")
+                    # Continue with remaining batches
             
-            logger.info(f"Successfully pushed {len(records)} records to Supabase")
-            return True
+            logger.info(f"Successfully pushed {total_inserted} records to Supabase")
+            return total_inserted > 0
             
         except Exception as e:
             logger.error(f"Error pushing to Supabase: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            return False
+    
+    @staticmethod
+    def verify_export(scan_date: datetime, expected_count: int) -> bool:
+        """Verify that the export was successful."""
+        try:
+            from supabase import create_client, Client
+            
+            if not config.SUPABASE_URL or not config.SUPABASE_KEY:
+                return False
+                
+            supabase = create_client(config.SUPABASE_URL, config.SUPABASE_KEY)
+            scan_date_str = scan_date.strftime('%Y-%m-%d')
+            
+            result = supabase.table('premarket_scans').select('count', count='exact').eq('scan_date', scan_date_str).eq('active', True).execute()
+            
+            actual_count = result.count if result.count is not None else 0
+            logger.info(f"Verification: Expected {expected_count}, Found {actual_count}")
+            
+            return actual_count == expected_count
+            
+        except Exception as e:
+            logger.error(f"Error verifying export: {e}")
             return False
 
 class MarkdownExporter:
@@ -126,6 +189,14 @@ class MarkdownExporter:
             f.write(f"| Pass Rate | {summary.get('pass_rate', '0.0%')} |\n")
             if summary.get('avg_interest_score'):
                 f.write(f"| Avg Interest Score | {summary.get('avg_interest_score'):.2f} |\n")
+            
+            # Add gap-specific summary if applicable
+            if 'avg_gap_percent' in summary:
+                f.write(f"| Avg Gap % | {summary.get('avg_gap_percent')} |\n")
+                f.write(f"| Max Gap % | {summary.get('max_gap_percent')} |\n")
+                if 'gap_distribution' in summary:
+                    f.write(f"| Gap Distribution | {summary.get('gap_distribution')} |\n")
+            
             f.write("\n")
             
             # Filter Criteria
@@ -141,27 +212,51 @@ class MarkdownExporter:
                 f.write("## Results\n\n")
                 f.write("❌ **No stocks passed all filters**\n")
             else:
-                f.write(f"## Top {min(50, len(scan_results))} Stocks by Interest Score\n\n")
+                # Check if this is a gap scan
+                is_gap_scan = 'gap_percent' in scan_results.columns and any(criteria.get(key, '') for key in ['Gap Direction', 'Min Gap %'])
                 
-                # Results table
-                f.write("| Rank | Ticker | Price | Score | PM Volume | PM % | ATR % |\n")
-                f.write("|:----:|:------:|------:|------:|----------:|-----:|------:|\n")
-                
-                for _, row in scan_results.head(50).iterrows():
-                    pm_vol_pct = (row['premarket_volume'] / row['avg_daily_volume'] * 100)
+                if is_gap_scan:
+                    f.write(f"## Top {min(50, len(scan_results))} Gapping Stocks by Interest Score\n\n")
+                    f.write("| Rank | Ticker | Price | Gap % | Score | PM Volume | PM % | ATR % |\n")
+                    f.write("|:----:|:------:|------:|------:|------:|----------:|-----:|------:|\n")
                     
-                    # Highlight top 3
-                    ticker = row['ticker']
-                    if row['rank'] == 1:
-                        ticker = f"🥇 **{ticker}**"
-                    elif row['rank'] == 2:
-                        ticker = f"🥈 **{ticker}**"
-                    elif row['rank'] == 3:
-                        ticker = f"🥉 **{ticker}**"
+                    for _, row in scan_results.head(50).iterrows():
+                        pm_vol_pct = (row['premarket_volume'] / row['avg_daily_volume'] * 100)
+                        gap_direction = "↑" if row['gap_percent'] > 0 else "↓"
+                        
+                        # Highlight top 3
+                        ticker = row['ticker']
+                        if row['rank'] == 1:
+                            ticker = f"🥇 **{ticker}**"
+                        elif row['rank'] == 2:
+                            ticker = f"🥈 **{ticker}**"
+                        elif row['rank'] == 3:
+                            ticker = f"🥉 **{ticker}**"
+                        
+                        f.write(f"| {row['rank']} | {ticker} | ${row['price']:.2f} | ")
+                        f.write(f"{gap_direction}{abs(row['gap_percent']):.2f}% | ")
+                        f.write(f"{row['interest_score']:.1f} | {row['premarket_volume']:,.0f} | ")
+                        f.write(f"{pm_vol_pct:.2f}% | {row['atr_percent']:.2f}% |\n")
+                else:
+                    f.write(f"## Top {min(50, len(scan_results))} Stocks by Interest Score\n\n")
+                    f.write("| Rank | Ticker | Price | Score | PM Volume | PM % | ATR % |\n")
+                    f.write("|:----:|:------:|------:|------:|----------:|-----:|------:|\n")
                     
-                    f.write(f"| {row['rank']} | {ticker} | ${row['price']:.2f} | ")
-                    f.write(f"{row['interest_score']:.1f} | {row['premarket_volume']:,.0f} | ")
-                    f.write(f"{pm_vol_pct:.2f}% | {row['atr_percent']:.2f}% |\n")
+                    for _, row in scan_results.head(50).iterrows():
+                        pm_vol_pct = (row['premarket_volume'] / row['avg_daily_volume'] * 100)
+                        
+                        # Highlight top 3
+                        ticker = row['ticker']
+                        if row['rank'] == 1:
+                            ticker = f"🥇 **{ticker}**"
+                        elif row['rank'] == 2:
+                            ticker = f"🥈 **{ticker}**"
+                        elif row['rank'] == 3:
+                            ticker = f"🥉 **{ticker}**"
+                        
+                        f.write(f"| {row['rank']} | {ticker} | ${row['price']:.2f} | ")
+                        f.write(f"{row['interest_score']:.1f} | {row['premarket_volume']:,.0f} | ")
+                        f.write(f"{pm_vol_pct:.2f}% | {row['atr_percent']:.2f}% |\n")
         
         logger.info(f"Report exported to {output_path}")
         return str(output_path)

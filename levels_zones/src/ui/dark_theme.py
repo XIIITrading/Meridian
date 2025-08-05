@@ -58,12 +58,12 @@ class DarkTheme:
     # Font settings
     FONT_FAMILY = "Segoe UI"
     FONT_FAMILY_MONO = "Consolas"
-    FONT_SIZE_SMALL = 11
-    FONT_SIZE_NORMAL = 11
-    FONT_SIZE_MEDIUM = 12
-    FONT_SIZE_LARGE = 13
-    FONT_SIZE_XLARGE = 14
-    FONT_SIZE_TITLE = 16
+    FONT_SIZE_SMALL = 9
+    FONT_SIZE_NORMAL = 10
+    FONT_SIZE_MEDIUM = 11
+    FONT_SIZE_LARGE = 12
+    FONT_SIZE_XLARGE = 12
+    FONT_SIZE_TITLE = 14
 
 
 class DarkStyleSheets:
@@ -104,7 +104,7 @@ class DarkStyleSheets:
             color: {DarkTheme.TEXT_PRIMARY};
         }}
     """
-    
+        
     # Input fields (LineEdit, SpinBox, etc.)
     INPUT_FIELD = f"""
         QLineEdit, QSpinBox, QDoubleSpinBox, QDateEdit, QTimeEdit, QDateTimeEdit {{
@@ -135,6 +135,31 @@ class DarkStyleSheets:
         }}
     """
     
+    # Calculations Fields
+    CALCULATION_TEXT_AREA = f"""
+        QTextEdit, QPlainTextEdit {{
+            background-color: {DarkTheme.BG_MEDIUM};
+            border: 1px solid {DarkTheme.BORDER_NORMAL};
+            border-radius: 3px;
+            color: {DarkTheme.TEXT_PRIMARY};
+            padding: 8px;
+            font-family: {DarkTheme.FONT_FAMILY_MONO};
+            font-size: 14px;  /* Larger than normal 11px */
+            line-height: 1.4;
+        }}
+        
+        QTextEdit:focus, QPlainTextEdit:focus {{
+            border: 1px solid {DarkTheme.BORDER_FOCUS};
+            background-color: {DarkTheme.BG_LIGHT};
+        }}
+        
+        QTextEdit:disabled, QPlainTextEdit:disabled {{
+            background-color: {DarkTheme.BG_DARK};
+            color: {DarkTheme.TEXT_DISABLED};
+            border: 1px solid {DarkTheme.BORDER_DARK};
+        }}
+    """
+
     # ComboBox style
     COMBO_BOX = f"""
         QComboBox {{

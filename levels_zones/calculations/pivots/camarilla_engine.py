@@ -1,5 +1,5 @@
 """
-Camarilla pivot calculator engine
+Camarilla pivot calculator engine - optimized for Polygon aggregated bars
 """
 
 from dataclasses import dataclass
@@ -30,7 +30,7 @@ class CamarillaResult:
 
 class CamarillaEngine:
     """
-    Camarilla pivot point calculator
+    Camarilla pivot point calculator - optimized for Polygon aggregated bars
     """
     
     # US market holidays (you can expand this list)
@@ -45,11 +45,17 @@ class CamarillaEngine:
         '2025-09-01',  # Labor Day
         '2025-11-27',  # Thanksgiving
         '2025-12-25',  # Christmas
-        # Add more holidays as needed
     ]
     
-    def __init__(self, analysis_date: Optional[datetime] = None):
-        """Initialize with optional analysis date for daily calculations"""
+    def __init__(self, polygon_client=None, analysis_date: Optional[datetime] = None):
+        """
+        Initialize with optional Polygon client for fetching aggregated bars
+        
+        Args:
+            polygon_client: Polygon REST client instance
+            analysis_date: Optional analysis date for calculations
+        """
+        self.polygon_client = polygon_client
         self.analysis_date = analysis_date
     
     def set_analysis_date(self, analysis_date: datetime):
@@ -69,16 +75,94 @@ class CamarillaEngine:
         
         return prior_date
     
+    def fetch_aggregated_data(self, ticker: str, timeframe: str, 
+                            analysis_date: Optional[datetime] = None) -> pd.DataFrame:
+        """
+        Fetch pre-aggregated data from Polygon based on timeframe
+        
+        Args:
+            ticker: Stock ticker symbol
+            timeframe: 'daily', 'weekly', or 'monthly'
+            analysis_date: Reference date for calculations
+            
+        Returns:
+            DataFrame with aggregated OHLC data
+        """
+        if self.polygon_client is None:
+            raise ValueError("Polygon client not provided")
+        
+        if analysis_date is None:
+            analysis_date = datetime.now()
+        
+        # Determine date range and multiplier/timespan for Polygon API
+        if timeframe == 'daily':
+            # Get last 5 trading days for daily pivots
+            end_date = analysis_date.strftime('%Y-%m-%d')
+            start_date = (analysis_date - timedelta(days=10)).strftime('%Y-%m-%d')
+            multiplier = 1
+            timespan = 'day'
+            
+        elif timeframe == 'weekly':
+            # Get last 8 weeks of data for weekly pivots
+            end_date = analysis_date.strftime('%Y-%m-%d')
+            start_date = (analysis_date - timedelta(weeks=8)).strftime('%Y-%m-%d')
+            multiplier = 1
+            timespan = 'week'
+            
+        elif timeframe == 'monthly':
+            # Get last 6 months of data for monthly pivots
+            end_date = analysis_date.strftime('%Y-%m-%d')
+            start_date = (analysis_date - timedelta(days=180)).strftime('%Y-%m-%d')
+            multiplier = 1
+            timespan = 'month'
+            
+        else:
+            raise ValueError(f"Invalid timeframe: {timeframe}")
+        
+        # Fetch data from Polygon
+        try:
+            aggs = self.polygon_client.get_aggs(
+                ticker=ticker,
+                multiplier=multiplier,
+                timespan=timespan,
+                from_=start_date,
+                to=end_date,
+                adjusted=True,
+                sort='asc',
+                limit=50000
+            )
+            
+            # Convert to DataFrame
+            data_list = []
+            for agg in aggs:
+                data_list.append({
+                    'timestamp': pd.Timestamp(agg.timestamp, unit='ms', tz='UTC'),
+                    'open': agg.open,
+                    'high': agg.high,
+                    'low': agg.low,
+                    'close': agg.close,
+                    'volume': agg.volume
+                })
+            
+            if not data_list:
+                return pd.DataFrame()
+            
+            df = pd.DataFrame(data_list)
+            df.set_index('timestamp', inplace=True)
+            df.sort_index(inplace=True)
+            
+            return df
+            
+        except Exception as e:
+            raise RuntimeError(f"Failed to fetch data from Polygon: {e}")
+    
     def calculate_from_data(self, data: pd.DataFrame, timeframe: str) -> CamarillaResult:
         """
         Calculate Camarilla pivots from OHLC data
         
         Args:
-            data: DataFrame with OHLC data (intraday data for daily calculations)
+            data: DataFrame with OHLC data (can be intraday for daily calculations or pre-aggregated)
             timeframe: Timeframe string ('daily', 'weekly', 'monthly')
-                - 'daily': Uses prior trading day 08:00-23:59 UTC
-                - 'weekly': Uses trailing 5 trading days
-                - 'monthly': Uses trailing 30 trading days
             
         Returns:
             CamarillaResult with calculated pivots
@@ -99,7 +183,7 @@ class CamarillaEngine:
                 data = data.copy()
                 data.index = data.index.tz_convert('UTC')
         
-        # Handle daily timeframe with specific time range
+        # Handle daily timeframe with specific logic for minute data
         if timeframe == 'daily':
             if self.analysis_date is None:
                 raise ValueError("Analysis date must be set for daily calculations")
@@ -110,50 +194,74 @@ class CamarillaEngine:
             else:
                 analysis_date = pd.Timestamp(self.analysis_date).tz_convert('UTC')
             
-            # Get prior trading day
-            prior_trading_day = self._get_prior_trading_day(analysis_date)
+            # Check if we're working with intraday data (many bars per day) or daily data (one bar per day)
+            daily_data_check = data[data.index.date == analysis_date.date()]
             
-            # Define time range: 08:00 to 23:59 UTC
-            start_time = prior_trading_day.replace(hour=8, minute=0, second=0, microsecond=0)
-            end_time = prior_trading_day.replace(hour=23, minute=59, second=59, microsecond=999999)
-            
-            # Filter data for the specific time range
-            period_data = data[(data.index >= start_time) & (data.index <= end_time)]
-            
-            if period_data.empty:
-                # If no data in extended hours, try regular trading hours (13:30-20:00 UTC)
-                start_time = prior_trading_day.replace(hour=13, minute=30, second=0, microsecond=0)
-                end_time = prior_trading_day.replace(hour=20, minute=0, second=0, microsecond=0)
+            if len(daily_data_check) > 1:
+                # Working with intraday data - use the original complex logic
+                # Get prior trading day
+                prior_trading_day = self._get_prior_trading_day(analysis_date)
+                
+                # Define time range: 08:00 to 23:59 UTC
+                start_time = prior_trading_day.replace(hour=8, minute=0, second=0, microsecond=0)
+                end_time = prior_trading_day.replace(hour=23, minute=59, second=59, microsecond=999999)
+                
+                # Filter data for the specific time range
                 period_data = data[(data.index >= start_time) & (data.index <= end_time)]
                 
                 if period_data.empty:
+                    # If no data in extended hours, try regular trading hours (13:30-20:00 UTC)
+                    start_time = prior_trading_day.replace(hour=13, minute=30, second=0, microsecond=0)
+                    end_time = prior_trading_day.replace(hour=20, minute=0, second=0, microsecond=0)
+                    period_data = data[(data.index >= start_time) & (data.index <= end_time)]
+                    
+                    if period_data.empty:
+                        return None
+                
+                # Calculate high, low, close for the period from intraday data
+                high = float(period_data['high'].max())
+                low = float(period_data['low'].min())
+                close = float(period_data.iloc[-1]['close'])  # Last close of the period
+            else:
+                # Working with daily aggregated data - just use the prior day's bar
+                prior_trading_day = self._get_prior_trading_day(analysis_date)
+                
+                # Find the bar for the prior trading day
+                period_data = data[data.index.date == prior_trading_day.date()]
+                if period_data.empty:
+                    # If no exact match, use the most recent bar
+                    period_data = data.tail(1)
+                
+                if period_data.empty:
                     return None
-            
-            # Calculate high, low, close for the period
-            high = float(period_data['high'].max())
-            low = float(period_data['low'].min())
-            close = float(period_data.iloc[-1]['close'])  # Last close of the period
+                
+                # Extract OHLC values from the daily bar
+                bar = period_data.iloc[-1]
+                high = float(bar['high'])
+                low = float(bar['low'])
+                close = float(bar['close'])
             
         else:
-            # For weekly and monthly, use trailing days approach
+            # For weekly and monthly with pre-aggregated data
             if timeframe == 'weekly':
-                lookback = 5
+                # Use the most recent complete weekly bar
+                period_data = data.tail(1)
+                
             elif timeframe == 'monthly':
-                lookback = 30
+                # Use the most recent complete monthly bar
+                period_data = data.tail(1)
+                
             else:
                 raise ValueError(f"Invalid timeframe: {timeframe}")
             
-            # Ensure we have enough data
-            if len(data) < lookback:
+            if period_data.empty:
                 return None
             
-            # Get the relevant period data
-            period_data = data.tail(lookback)
-            
-            # Calculate high, low, close for the period
-            high = float(period_data['high'].max())
-            low = float(period_data['low'].min())
-            close = float(period_data.iloc[-1]['close'])  # Use most recent close
+            # Extract OHLC values from the aggregated bar
+            bar = period_data.iloc[-1]
+            high = float(bar['high'])
+            low = float(bar['low'])
+            close = float(bar['close'])
         
         # Calculate range
         range_val = high - low
@@ -213,3 +321,41 @@ class CamarillaEngine:
             range_type=range_type,
             central_pivot=pivot
         )
+    
+    def calculate_pivots(self, ticker: str, timeframe: str, 
+                        analysis_date: Optional[datetime] = None) -> CamarillaResult:
+        """
+        Convenience method to fetch aggregated data and calculate pivots in one call
+        
+        Args:
+            ticker: Stock ticker symbol
+            timeframe: 'daily', 'weekly', or 'monthly'
+            analysis_date: Reference date for calculations
+            
+        Returns:
+            CamarillaResult with calculated pivots
+        """
+        # Fetch aggregated data
+        data = self.fetch_aggregated_data(ticker, timeframe, analysis_date)
+        
+        # Calculate pivots
+        return self.calculate_from_data(data, timeframe, analysis_date)
+
+
+# Example usage:
+"""
+from polygon import RESTClient
+
+# Initialize with your Polygon API key
+polygon_client = RESTClient("YOUR_API_KEY")
+camarilla_engine = CamarillaEngine(polygon_client)
+
+# Calculate daily pivots for AAPL
+daily_pivots = camarilla_engine.calculate_pivots("AAPL", "daily")
+
+# Calculate weekly pivots for SPY
+weekly_pivots = camarilla_engine.calculate_pivots("SPY", "weekly")
+
+# Calculate monthly pivots for QQQ
+monthly_pivots = camarilla_engine.calculate_pivots("QQQ", "monthly")
+"""

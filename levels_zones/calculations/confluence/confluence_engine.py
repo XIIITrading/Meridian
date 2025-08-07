@@ -31,11 +31,11 @@ class SourceType(Enum):
 
 class ConfluenceLevel(Enum):
     """M15 zone confluence ranking levels"""
-    L1 = "L1"  # Highest confluence (8+ points)
-    L2 = "L2"  # High confluence (6-7 points)
+    L1 = "L1"  # Minimal confluence (0-1 points)
+    L2 = "L2"  # Low confluence (2-3 points)
     L3 = "L3"  # Medium confluence (4-5 points)
-    L4 = "L4"  # Low confluence (2-3 points)
-    L5 = "L5"  # Minimal confluence (0-1 points)
+    L4 = "L4"  # High confluence (6-7 points)
+    L5 = "L5"  # Highest confluence (8+ points)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -62,7 +62,7 @@ class M15ZoneScore:
     zone_high: Decimal
     confluence_count: int = 0
     confluent_inputs: List[ConfluenceInput] = field(default_factory=list)
-    confluence_level: ConfluenceLevel = ConfluenceLevel.L5
+    confluence_level: ConfluenceLevel = ConfluenceLevel.L1
     
     def __post_init__(self):
         """Validate zone data"""
@@ -116,10 +116,10 @@ class ConfluenceResult:
     input_summary: Dict[SourceType, int] = field(default_factory=dict)
     
     def get_ranked_zones(self) -> List[M15ZoneScore]:
-        """Get zones ranked by confluence count (highest first)"""
+        """Get zones ranked by price (highest first)"""
         return sorted(
             self.zone_scores,
-            key=lambda z: (z.confluence_count, -float(z.zone_number)),
+            key=lambda z: float(z.zone_center),
             reverse=True
         )
     

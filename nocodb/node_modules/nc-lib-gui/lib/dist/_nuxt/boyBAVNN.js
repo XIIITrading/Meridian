@@ -1,0 +1,1 @@
+const f=(e,r)=>{if(e===r)return!0;if(e==null||r===null||typeof e!=typeof r)return!1;if(typeof e!="object")return e===r;if(Object.keys(e).length!==Object.keys(r).length)return!1;for(const t in e)if(!(t in r)||!f(e[t],r[t]))return!1;return!0};export{f as d};

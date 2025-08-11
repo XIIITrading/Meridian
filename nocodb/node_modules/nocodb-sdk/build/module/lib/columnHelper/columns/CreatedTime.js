@@ -1,0 +1,7 @@
+import { DateTimeHelper } from './DateTime';
+export class CreatedTimeHelper extends DateTimeHelper {
+    serializeValue(_value, _params) {
+        return null;
+    }
+}
+//# sourceMappingURL=data:application/json;base64,eyJ2ZXJzaW9uIjozLCJmaWxlIjoiQ3JlYXRlZFRpbWUuanMiLCJzb3VyY2VSb290IjoiIiwic291cmNlcyI6WyIuLi8uLi8uLi8uLi8uLi9zcmMvbGliL2NvbHVtbkhlbHBlci9jb2x1bW5zL0NyZWF0ZWRUaW1lLnRzIl0sIm5hbWVzIjpbXSwibWFwcGluZ3MiOiJBQUNBLE9BQU8sRUFBRSxjQUFjLEVBQUUsTUFBTSxZQUFZLENBQUM7QUFFNUMsTUFBTSxPQUFPLGlCQUFrQixTQUFRLGNBQWM7SUFDbkQsY0FBYyxDQUNaLE1BQVcsRUFDWCxPQUE0QztRQUU1QyxPQUFPLElBQUksQ0FBQztJQUNkLENBQUM7Q0FDRiJ9

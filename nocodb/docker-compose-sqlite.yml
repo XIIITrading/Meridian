@@ -1,0 +1,14 @@
+﻿version: '3.8'
+
+services:
+  nocodb:
+    image: nocodb/nocodb:latest
+    container_name: nocodb_trading
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - NC_AUTH_JWT_SECRET=your-super-secret-jwt-key-minimum-32-chars
+      - NC_DISABLE_TELE=true
+    volumes:
+      - ./data:/usr/app/data

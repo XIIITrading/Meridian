@@ -1,0 +1,44 @@
+var XcType;
+(function (XcType) {
+    XcType["ID"] = "ID";
+    XcType["ForeignKey"] = "ForeignKey";
+    XcType["SingleLineText"] = "SingleLineText";
+    XcType["LongText"] = "LongText";
+    XcType["Attachment"] = "Attachment";
+    XcType["Checkbox"] = "Checkbox";
+    XcType["MultiSelect"] = "MultiSelect";
+    XcType["SingleSelect"] = "SingleSelect";
+    XcType["Collaborator"] = "Collaborator";
+    XcType["Date"] = "Date";
+    XcType["Year"] = "Year";
+    XcType["Time"] = "Time";
+    XcType["PhoneNumber"] = "PhoneNumber";
+    XcType["Email"] = "Email";
+    XcType["URL"] = "URL";
+    XcType["Number"] = "Number";
+    XcType["Decimal"] = "Decimal";
+    XcType["Currency"] = "Currency";
+    XcType["Percent"] = "Percent";
+    XcType["Duration"] = "Duration";
+    XcType["Rating"] = "Rating";
+    XcType["Formula"] = "Formula";
+    XcType["Rollup"] = "Rollup";
+    XcType["Count"] = "Count";
+    XcType["Lookup"] = "Lookup";
+    XcType["DateTime"] = "DateTime";
+    XcType["CreateTime"] = "CreateTime";
+    XcType["LastModifiedTime"] = "LastModifiedTime";
+    XcType["AutoNumber"] = "AutoNumber";
+    XcType["Barcode"] = "Barcode";
+    XcType["Button"] = "Button";
+    XcType["Password"] = "Password";
+})(XcType || (XcType = {}));
+var XcActionType;
+(function (XcActionType) {
+    XcActionType["SUBMIT"] = "SUBMIT";
+    XcActionType["TEST"] = "TEST";
+    XcActionType["CLEAR"] = "CLEAR";
+    XcActionType["CANCEL"] = "CANCEL";
+})(XcActionType || (XcActionType = {}));
+export { XcType, XcActionType };
+//# sourceMappingURL=data:application/json;base64,eyJ2ZXJzaW9uIjozLCJmaWxlIjoiWGNVSUJ1aWxkZXIuanMiLCJzb3VyY2VSb290IjoiIiwic291cmNlcyI6WyIuLi8uLi8uLi9zcmMvbGliL1hjVUlCdWlsZGVyLnRzIl0sIm5hbWVzIjpbXSwibWFwcGluZ3MiOiJBQVNBLElBQUssTUFpQ0o7QUFqQ0QsV0FBSyxNQUFNO0lBQ1QsbUJBQVMsQ0FBQTtJQUNULG1DQUF5QixDQUFBO0lBQ3pCLDJDQUFpQyxDQUFBO0lBQ2pDLCtCQUFxQixDQUFBO0lBQ3JCLG1DQUF5QixDQUFBO0lBQ3pCLCtCQUFxQixDQUFBO0lBQ3JCLHFDQUEyQixDQUFBO0lBQzNCLHVDQUE2QixDQUFBO0lBQzdCLHVDQUE2QixDQUFBO0lBQzdCLHVCQUFhLENBQUE7SUFDYix1QkFBYSxDQUFBO0lBQ2IsdUJBQWEsQ0FBQTtJQUNiLHFDQUEyQixDQUFBO0lBQzNCLHlCQUFlLENBQUE7SUFDZixxQkFBVyxDQUFBO0lBQ1gsMkJBQWlCLENBQUE7SUFDakIsNkJBQW1CLENBQUE7SUFDbkIsK0JBQXFCLENBQUE7SUFDckIsNkJBQW1CLENBQUE7SUFDbkIsK0JBQXFCLENBQUE7SUFDckIsMkJBQWlCLENBQUE7SUFDakIsNkJBQW1CLENBQUE7SUFDbkIsMkJBQWlCLENBQUE7SUFDakIseUJBQWUsQ0FBQTtJQUNmLDJCQUFpQixDQUFBO0lBQ2pCLCtCQUFxQixDQUFBO0lBQ3JCLG1DQUF5QixDQUFBO0lBQ3pCLCtDQUFxQyxDQUFBO0lBQ3JDLG1DQUF5QixDQUFBO0lBQ3pCLDZCQUFtQixDQUFBO0lBQ25CLDJCQUFpQixDQUFBO0lBQ2pCLCtCQUFxQixDQUFBO0FBQ3ZCLENBQUMsRUFqQ0ksTUFBTSxLQUFOLE1BQU0sUUFpQ1Y7QUF3QkQsSUFBSyxZQUtKO0FBTEQsV0FBSyxZQUFZO0lBQ2YsaUNBQWlCLENBQUE7SUFDakIsNkJBQWEsQ0FBQTtJQUNiLCtCQUFlLENBQUE7SUFDZixpQ0FBaUIsQ0FBQTtBQUNuQixDQUFDLEVBTEksWUFBWSxLQUFaLFlBQVksUUFLaEI7QUFFRCxPQUFPLEVBQWtCLE1BQU0sRUFBWSxZQUFZLEVBQUUsQ0FBQyJ9

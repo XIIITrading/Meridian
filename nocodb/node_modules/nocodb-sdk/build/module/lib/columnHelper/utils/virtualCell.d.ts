@@ -1,0 +1,15 @@
+import { ColumnType, LinkToAnotherRecordType } from '../../../lib/Api';
+export declare const isLTAR: (uidt: string | undefined, _colOptions: unknown) => _colOptions is LinkToAnotherRecordType;
+export declare const isHm: (column: ColumnType) => boolean;
+export declare const isMm: (column: ColumnType) => boolean;
+export declare const isBt: (column: ColumnType) => boolean;
+export declare const isOo: (column: ColumnType) => boolean;
+export declare const isLookup: (column: ColumnType) => boolean;
+export declare const isRollup: (column: ColumnType) => boolean;
+export declare const isFormula: (column: ColumnType) => boolean;
+export declare const isQrCode: (column: ColumnType) => boolean;
+export declare const isBarcode: (column: ColumnType) => boolean;
+export declare const isCount: (column: ColumnType) => boolean;
+export declare const isLink: (column: ColumnType) => boolean;
+export declare function isReadOnlyVirtualCell(col: ColumnType): boolean;
+export declare const isReadonly: (col: ColumnType) => boolean;

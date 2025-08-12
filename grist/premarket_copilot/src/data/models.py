@@ -80,7 +80,6 @@ class WeeklyData:
     internal_trend: TrendDirection
     position_structure: float  # Percentage (0-100)
     eow_bias: TrendDirection  # End of Week bias
-    price_levels: List[Decimal] = field(default_factory=list)  # Add this line for wl1-wl4
     notes: str = ""
     
     def __post_init__(self):
@@ -88,9 +87,6 @@ class WeeklyData:
         # Validate position structure percentage
         if not 0 <= self.position_structure <= 100:
             raise ValueError("Position structure must be between 0 and 100")
-        
-        # Convert price levels to Decimal
-        self.price_levels = [Decimal(str(level)) for level in self.price_levels if level]
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON serialization"""
@@ -99,7 +95,6 @@ class WeeklyData:
             'internal_trend': self.internal_trend.value,
             'position_structure': self.position_structure,
             'eow_bias': self.eow_bias.value,
-            'price_levels': [str(level) for level in self.price_levels],  # Add this line
             'notes': self.notes
         }
     
@@ -111,7 +106,6 @@ class WeeklyData:
             internal_trend=TrendDirection(data['internal_trend']),
             position_structure=float(data['position_structure']),
             eow_bias=TrendDirection(data['eow_bias']),
-            price_levels=[Decimal(level) for level in data.get('price_levels', [])],  # Add this line
             notes=data.get('notes', '')
         )
 

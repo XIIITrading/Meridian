@@ -63,6 +63,7 @@ class SupabaseExporter:
             for _, row in scan_results.iterrows():
                 record = {
                     'ticker': str(row['ticker']),
+                    'ticker_id': str(row.get('ticker_id', '')),  # Add ticker_id field
                     'ticker_list': str(row.get('ticker_list', 'sp500')),
                     'price': float(row['price']),
                     'rank': int(row['rank']),
@@ -217,8 +218,8 @@ class MarkdownExporter:
                 
                 if is_gap_scan:
                     f.write(f"## Top {min(50, len(scan_results))} Gapping Stocks by Interest Score\n\n")
-                    f.write("| Rank | Ticker | Price | Gap % | Score | PM Volume | PM % | ATR % |\n")
-                    f.write("|:----:|:------:|------:|------:|------:|----------:|-----:|------:|\n")
+                    f.write("| Rank | Ticker | Ticker ID | Price | Gap % | Score | PM Volume | PM % | ATR % |\n")
+                    f.write("|:----:|:------:|:---------:|------:|------:|------:|----------:|-----:|------:|\n")
                     
                     for _, row in scan_results.head(50).iterrows():
                         pm_vol_pct = (row['premarket_volume'] / row['avg_daily_volume'] * 100)
@@ -233,14 +234,16 @@ class MarkdownExporter:
                         elif row['rank'] == 3:
                             ticker = f"🥉 **{ticker}**"
                         
-                        f.write(f"| {row['rank']} | {ticker} | ${row['price']:.2f} | ")
+                        ticker_id = row.get('ticker_id', 'N/A')
+                        
+                        f.write(f"| {row['rank']} | {ticker} | {ticker_id} | ${row['price']:.2f} | ")
                         f.write(f"{gap_direction}{abs(row['gap_percent']):.2f}% | ")
                         f.write(f"{row['interest_score']:.1f} | {row['premarket_volume']:,.0f} | ")
                         f.write(f"{pm_vol_pct:.2f}% | {row['atr_percent']:.2f}% |\n")
                 else:
                     f.write(f"## Top {min(50, len(scan_results))} Stocks by Interest Score\n\n")
-                    f.write("| Rank | Ticker | Price | Score | PM Volume | PM % | ATR % |\n")
-                    f.write("|:----:|:------:|------:|------:|----------:|-----:|------:|\n")
+                    f.write("| Rank | Ticker | Ticker ID | Price | Score | PM Volume | PM % | ATR % |\n")
+                    f.write("|:----:|:------:|:---------:|------:|------:|----------:|-----:|------:|\n")
                     
                     for _, row in scan_results.head(50).iterrows():
                         pm_vol_pct = (row['premarket_volume'] / row['avg_daily_volume'] * 100)
@@ -254,7 +257,9 @@ class MarkdownExporter:
                         elif row['rank'] == 3:
                             ticker = f"🥉 **{ticker}**"
                         
-                        f.write(f"| {row['rank']} | {ticker} | ${row['price']:.2f} | ")
+                        ticker_id = row.get('ticker_id', 'N/A')
+                        
+                        f.write(f"| {row['rank']} | {ticker} | {ticker_id} | ${row['price']:.2f} | ")
                         f.write(f"{row['interest_score']:.1f} | {row['premarket_volume']:,.0f} | ")
                         f.write(f"{pm_vol_pct:.2f}% | {row['atr_percent']:.2f}% |\n")
         

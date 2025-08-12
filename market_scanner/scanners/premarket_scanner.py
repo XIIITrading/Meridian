@@ -4,7 +4,7 @@ Coordinates data fetching, filtering, and scoring.
 """
 import pandas as pd
 import numpy as np
-from datetime import datetime, timedelta, timezone, time
+from datetime import datetime, timedelta, timezone, time, date
 from typing import Dict, List, Optional, Tuple
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -18,6 +18,34 @@ from ..config import config
 from ..utils.market_timing import MarketTiming
 
 logger = logging.getLogger(__name__)
+
+def generate_ticker_id(ticker: str, date_obj) -> str:
+    """
+    Generate ticker_id in format: Ticker.MMDDYY
+    
+    Args:
+        ticker: Stock ticker symbol
+        date_obj: datetime.date or datetime.datetime object
+        
+    Returns:
+        str: Formatted ticker_id (e.g., "AAPL.081125")
+    """
+    # Handle both datetime and date objects
+    if isinstance(date_obj, datetime):
+        date_obj = date_obj.date()
+    elif isinstance(date_obj, date):
+        pass
+    else:
+        # If it's a string, try to parse it
+        if isinstance(date_obj, str):
+            date_obj = datetime.strptime(date_obj, '%Y-%m-%d').date()
+        else:
+            raise ValueError(f"Unsupported date type: {type(date_obj)}")
+    
+    # Format as MMDDYY
+    formatted_date = date_obj.strftime('%m%d%y')
+    
+    return f"{ticker}.{formatted_date}"
 
 class PremarketScanner(BaseScanner):
     """
@@ -100,6 +128,12 @@ class PremarketScanner(BaseScanner):
         # Add scan metadata
         ranked_data['scan_time'] = scan_time
         ranked_data['ticker_list'] = self.ticker_list.value if self.ticker_list else 'all_us_equities'
+        
+        # Generate ticker_id for each row
+        scan_date = scan_time.date()
+        ranked_data['ticker_id'] = ranked_data['ticker'].apply(
+            lambda ticker: generate_ticker_id(ticker, scan_date)
+        )
         
         logger.info(f"Scan complete: {len(ranked_data)} stocks passed filters")
         
@@ -241,6 +275,7 @@ class PremarketScanner(BaseScanner):
             # Return data dictionary
             return {
                 'ticker': ticker,
+                'ticker_id': generate_ticker_id(ticker, scan_time.date()),
                 'price': premarket_price,
                 'previous_close': previous_close,
                 'gap_percent': gap_percent,
@@ -365,7 +400,7 @@ class PremarketScanner(BaseScanner):
         """Export scan results to file."""
         # Prepare display columns
         display_columns = [
-            'rank', 'ticker', 'price', 'interest_score',
+            'rank', 'ticker', 'ticker_id', 'price', 'interest_score',
             'premarket_volume', 'avg_daily_volume',
             'atr', 'atr_percent', 'dollar_volume'
         ]

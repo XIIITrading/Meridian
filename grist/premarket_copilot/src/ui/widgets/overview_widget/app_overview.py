@@ -205,17 +205,13 @@ class OverviewWidget(QWidget):
         self.weekly_frame.eow_bias.currentTextChanged.connect(lambda: self.data_changed.emit())
         self.weekly_frame.notes.textChanged.connect(lambda: self.data_changed.emit())
         
-        # Connect weekly price levels (NEW)
-        for level in self.weekly_frame.price_levels:
-            level.valueChanged.connect(lambda: self.data_changed.emit())
-        
         self.daily_frame.trend_direction.currentTextChanged.connect(lambda: self.data_changed.emit())
         self.daily_frame.internal_trend.currentTextChanged.connect(lambda: self.data_changed.emit())
         self.daily_frame.position_structure.valueChanged.connect(lambda: self.data_changed.emit())
         self.daily_frame.eod_bias.currentTextChanged.connect(lambda: self.data_changed.emit())
         self.daily_frame.notes.textChanged.connect(lambda: self.data_changed.emit())
         
-        for level in self.daily_frame.price_levels:
+        for level in self.daily_frame.above_levels + self.daily_frame.below_levels:
             level.valueChanged.connect(lambda: self.data_changed.emit())
     
     def statusBar(self):
@@ -529,13 +525,6 @@ class OverviewWidget(QWidget):
                     self.weekly_frame.eow_bias.setCurrentIndex(idx)
             if 'notes' in weekly:
                 self.weekly_frame.notes.setPlainText(weekly['notes'])
-            
-            # Load weekly price levels
-            if 'price_levels' in weekly:
-                levels = weekly['price_levels']
-                for i, level in enumerate(levels[:4]):  # Load up to 4 levels
-                    if i < len(self.weekly_frame.price_levels):
-                        self.weekly_frame.price_levels[i].setValue(float(level))
         
         # Load daily data
         if 'daily' in session_data and session_data['daily']:

@@ -173,19 +173,17 @@ class FieldValidator:
     def validate_analysis_datetime(dt: datetime) -> None:
         """
         Validate that a datetime is valid for analysis.
-        RELAXED: Allow future dates up to 1 day ahead (for pre-market analysis)
+        All timestamps are in UTC - no timezone conversion needed.
         
         Args:
             dt: Datetime to validate (in UTC)
             
         Raises:
-            ValidationError: If datetime is too far in the future
+            ValidationError: If datetime is in the future
         """
-        # Allow up to 1 day in the future for pre-market analysis
-        future_limit = datetime.utcnow() + timedelta(days=1)
-        if dt > future_limit:
+        if dt > datetime.utcnow():
             raise ValidationError("analysis_datetime", 
-                "Analysis datetime cannot be more than 1 day in the future")
+                "Analysis datetime cannot be in the future")
         
         logger.debug(f"Analysis datetime validated: {dt} UTC")
     
@@ -193,7 +191,7 @@ class FieldValidator:
     def validate_candle_datetime(dt: datetime, session_date: date) -> None:
         """
         Validate that a candle datetime is valid.
-        RELAXED validation - just check it's not ridiculously in the future.
+        Minimal validation - just check it's a valid datetime.
         
         Args:
             dt: Candle datetime (in UTC)
@@ -202,12 +200,10 @@ class FieldValidator:
         Raises:
             ValidationError: If datetime is invalid
         """
-        # Only validate that it's not more than 1 day in the future
-        # This allows for timezone differences and pre-market data
-        future_limit = datetime.utcnow() + timedelta(days=1)
-        if dt > future_limit:
+        # Only validate that it's not in the future
+        if dt > datetime.utcnow():
             raise ValidationError("candle_datetime",
-                f"Candle datetime {dt} is more than 1 day in the future")
+                "Candle datetime cannot be in the future")
         
         # That's it - no other restrictions!
         logger.debug(f"Candle datetime validated: {dt} UTC")
@@ -219,11 +215,11 @@ class PriceLevelValidator:
     @staticmethod
     def validate_price_level(level: PriceLevel, session_date: Optional[date] = None) -> List[str]:
         """
-        Validate a single price level with RELAXED rules.
+        Validate a single price level.
         
         Args:
             level: PriceLevel object to validate
-            session_date: Session date (optional, not strictly enforced)
+            session_date: Session date for datetime validation
             
         Returns:
             List of validation errors (empty if valid)
@@ -231,7 +227,7 @@ class PriceLevelValidator:
         errors = []
         
         try:
-            # Basic price validation - just check they're positive
+            # Validate prices are positive
             if level.line_price <= 0:
                 errors.append("Line price must be positive")
             if level.candle_high <= 0:
@@ -243,23 +239,21 @@ class PriceLevelValidator:
             if level.candle_high < level.candle_low:
                 errors.append("Candle high must be >= candle low")
             
-            # RELAXED: Line price validation with larger tolerance
-            tolerance = Decimal("1.00")  # Increased from 0.01 to 1.00
-            if level.line_price > 0:  # Only check if line price is set
-                if not (level.candle_low - tolerance <= level.line_price <= level.candle_high + tolerance):
-                    # Just log a warning instead of error
-                    logger.warning(f"Line price {level.line_price} outside candle range {level.candle_low}-{level.candle_high}")
-                    # Don't add to errors - allow it
+            # Validate line price is within candle range (with small tolerance)
+            tolerance = Decimal("0.01")
+            if not (level.candle_low - tolerance <= level.line_price <= level.candle_high + tolerance):
+                errors.append("Line price should be within candle range")
             
-            # RELAXED: Level ID format - more flexible pattern
-            if level.level_id:
-                # Just check it contains _L somewhere
-                if '_L' not in level.level_id:
-                    errors.append(f"Invalid level_id format: {level.level_id} (must contain '_L')")
-            else:
-                errors.append("Level ID is required")
+            # Validate level_id format
+            if not re.match(r'^[A-Z0-9]+\.\d{6}_L\d{3}$', level.level_id):
+                errors.append(f"Invalid level_id format: {level.level_id}")
             
-            # NO datetime validation - removed completely
+            # Validate candle datetime if session date provided
+            if session_date:
+                try:
+                    FieldValidator.validate_candle_datetime(level.candle_datetime, session_date)
+                except ValidationError as e:
+                    errors.append(f"Candle datetime: {e.message}")
             
         except Exception as e:
             errors.append(f"Validation error: {str(e)}")
@@ -270,7 +264,7 @@ class PriceLevelValidator:
     def validate_price_levels_set(levels: List[PriceLevel], 
                                 current_price: Decimal) -> Tuple[bool, List[str]]:
         """
-        Validate a set of price levels with RELAXED rules.
+        Validate a set of price levels.
         
         Args:
             levels: List of PriceLevel objects
@@ -298,25 +292,20 @@ class PriceLevelValidator:
                 if abs(prices[i] - prices[j]) < Decimal("0.01"):
                     errors.append(f"Duplicate price levels: {prices[i]} and {prices[j]}")
         
-        # RELAXED: Don't strictly enforce distribution above/below current price
-        # Just log a warning if all levels are on one side
+        # Validate distribution (should have levels both above and below current price)
         if levels and current_price > 0:
             above_count = sum(1 for level in levels if level.line_price > current_price)
             below_count = sum(1 for level in levels if level.line_price < current_price)
             
             if above_count == 0:
-                logger.warning("No price levels above current price")
-                # Don't add to errors
+                errors.append("No price levels above current price")
             elif above_count > 3:
-                logger.warning(f"{above_count} price levels above current price (recommended max: 3)")
-                # Don't add to errors
+                errors.append("Maximum 3 price levels above current price")
             
             if below_count == 0:
-                logger.warning("No price levels below current price")
-                # Don't add to errors
+                errors.append("No price levels below current price")
             elif below_count > 3:
-                logger.warning(f"{below_count} price levels below current price (recommended max: 3)")
-                # Don't add to errors
+                errors.append("Maximum 3 price levels below current price")
         
         return len(errors) == 0, errors
 
@@ -327,7 +316,7 @@ class TradingSessionValidator:
     @staticmethod
     def validate_session(session: TradingSession) -> Tuple[bool, Dict[str, List[str]]]:
         """
-        Comprehensive validation of a trading session with RELAXED rules.
+        Comprehensive validation of a trading session.
         
         Args:
             session: TradingSession object to validate
@@ -348,8 +337,8 @@ class TradingSessionValidator:
             # Validate ticker
             session.ticker = FieldValidator.validate_ticker(session.ticker)
             
-            # NO date validation - removed all date and historical validation
-            # Allow any dates, past or future
+            # REMOVED ALL DATE AND HISTORICAL VALIDATION
+            # No validation for dates or is_live flag
             
         except ValidationError as e:
             errors['overview'].append(e.message)
@@ -370,10 +359,9 @@ class TradingSessionValidator:
                 if not 0 <= session.daily_data.position_structure <= 100:
                     errors['daily'].append("Position structure must be 0-100%")
                 
-                # RELAXED: Don't require exactly 6 price levels
-                if len(session.daily_data.price_levels) > 6:
-                    errors['daily'].append("Maximum 6 daily price levels allowed")
-                # Allow fewer than 6 levels
+                # Price levels count
+                if len(session.daily_data.price_levels) != 6:
+                    errors['daily'].append("Exactly 6 daily price levels required")
                 
             except Exception as e:
                 errors['daily'].append(str(e))
@@ -382,7 +370,7 @@ class TradingSessionValidator:
         try:
             # Pre-market price - only validate if set
             if session.pre_market_price > 0:
-                # ATR values - just check they're not negative
+                # ATR values
                 atr_fields = [
                     ('5-minute ATR', session.atr_5min),
                     ('10-minute ATR', session.atr_10min),
@@ -395,25 +383,20 @@ class TradingSessionValidator:
                         errors['metrics'].append(f"{field_name} cannot be negative")
                 
                 # RELAXED ATR bands calculation validation
-                # Just log differences, don't error
+                # Only validate if both daily_atr and pre_market_price are set
                 if session.daily_atr > 0 and session.pre_market_price > 0:
                     expected_high = session.pre_market_price + session.daily_atr
                     expected_low = session.pre_market_price - session.daily_atr
                     
-                    # Use a very large tolerance - 5 points
-                    tolerance = Decimal("5.0")
+                    # Use a larger tolerance
+                    tolerance = Decimal("1.0")
                     
-                    if session.atr_high > 0:
-                        diff_high = abs(session.atr_high - expected_high)
-                        if diff_high > tolerance:
-                            logger.info(f"ATR High calculation difference: {diff_high:.2f}")
-                            # Don't add to errors
-                            
-                    if session.atr_low > 0:
-                        diff_low = abs(session.atr_low - expected_low)
-                        if diff_low > tolerance:
-                            logger.info(f"ATR Low calculation difference: {diff_low:.2f}")
-                            # Don't add to errors
+                    # Only log warnings instead of errors
+                    if session.atr_high > 0 and abs(session.atr_high - expected_high) > tolerance:
+                        logger.warning(f"ATR High calculation difference: {abs(session.atr_high - expected_high)}")
+                        
+                    if session.atr_low > 0 and abs(session.atr_low - expected_low) > tolerance:
+                        logger.warning(f"ATR Low calculation difference: {abs(session.atr_low - expected_low)}")
             
         except Exception as e:
             errors['metrics'].append(str(e))
@@ -436,7 +419,6 @@ class TradingSessionValidator:
     def validate_for_analysis(session: TradingSession) -> Tuple[bool, List[str]]:
         """
         Validate that a session has all required data for analysis.
-        RELAXED: Only check for essential data.
         
         Args:
             session: TradingSession to validate
@@ -446,29 +428,23 @@ class TradingSessionValidator:
         """
         missing = []
         
-        # Only check for truly essential data
-        if not session.ticker:
-            missing.append("Ticker symbol")
-        
-        # RELAXED: Don't require all analysis data
-        # Allow analysis even with partial data
-        
-        # Only require at least one M15 level
-        if not session.m15_levels:
-            missing.append("At least one M15 price level")
-        
-        # Only warn about missing data, don't block analysis
+        # Check required data
         if not session.weekly_data:
-            logger.warning("Weekly analysis data missing")
+            missing.append("Weekly analysis data")
         
         if not session.daily_data:
-            logger.warning("Daily analysis data missing")
+            missing.append("Daily analysis data")
+        
+        if not session.m15_levels:
+            missing.append("M15 price levels")
+        elif len(session.m15_levels) < 2:
+            missing.append("At least 2 M15 price levels required")
         
         if session.pre_market_price <= 0:
-            logger.warning("Pre-market price not set")
+            missing.append("Valid pre-market price")
         
         if session.daily_atr <= 0:
-            logger.warning("Daily ATR not calculated")
+            missing.append("Valid daily ATR")
         
         return len(missing) == 0, missing
 
@@ -481,7 +457,6 @@ class ATRValidator:
                            atr_15min: Decimal, daily_atr: Decimal) -> List[str]:
         """
         Validate ATR values for consistency.
-        RELAXED: Only return warnings, not errors.
         
         Args:
             atr_5min: 5-minute ATR
@@ -494,19 +469,19 @@ class ATRValidator:
         """
         warnings = []
         
-        # RELAXED: Use larger multipliers for unusual comparisons
-        if atr_5min > atr_10min * Decimal("2.0"):  # Increased from 1.5
+        # Generally, longer timeframe ATRs should be larger
+        if atr_5min > atr_10min * Decimal("1.5"):
             warnings.append("5-min ATR unusually high compared to 10-min ATR")
         
-        if atr_10min > atr_15min * Decimal("2.0"):  # Increased from 1.5
+        if atr_10min > atr_15min * Decimal("1.5"):
             warnings.append("10-min ATR unusually high compared to 15-min ATR")
         
         # Daily ATR should typically be larger than intraday ATRs
-        if daily_atr < atr_15min * Decimal("0.5"):  # More relaxed
-            warnings.append("Daily ATR is smaller than half of 15-min ATR (unusual)")
+        if daily_atr < atr_15min:
+            warnings.append("Daily ATR is smaller than 15-min ATR (unusual)")
         
         # Check for extreme values
-        if daily_atr > atr_15min * Decimal("20"):  # Increased from 10
+        if daily_atr > atr_15min * Decimal("10"):
             warnings.append("Daily ATR seems extremely high compared to intraday ATRs")
         
         return warnings
@@ -519,7 +494,7 @@ class DateTimeValidator:
     def validate_market_date(check_date: date) -> Tuple[bool, str]:
         """
         Validate that a date is valid.
-        RELAXED: Allow any date.
+        Minimal validation.
         
         Args:
             check_date: Date to validate
@@ -527,7 +502,7 @@ class DateTimeValidator:
         Returns:
             Tuple of (is_valid, error_message)
         """
-        # Allow any date - past, present, or future
+        # Allow any date - past or present
         return True, ""
     
     @staticmethod
@@ -535,23 +510,21 @@ class DateTimeValidator:
                                         candle_datetimes: List[datetime]) -> List[str]:
         """
         Validate candle datetimes.
-        RELAXED: Only check for extremely future dates.
+        No restrictions on dates - allow any historical data.
         
         Args:
             session_date: The session date
             candle_datetimes: List of candle datetimes (UTC)
             
         Returns:
-            List of validation errors (minimal restrictions)
+            List of validation errors (empty - no restrictions)
         """
         errors = []
         
-        # Only check that datetimes aren't more than 1 day in the future
-        future_limit = datetime.utcnow() + timedelta(days=1)
-        
+        # Only check that datetimes aren't in the future
         for i, candle_dt in enumerate(candle_datetimes):
-            if candle_dt > future_limit:
-                errors.append(f"Candle {i+1} datetime is more than 1 day in the future: {candle_dt}")
+            if candle_dt > datetime.utcnow():
+                errors.append(f"Candle {i+1} has future datetime: {candle_dt}")
         
         return errors
 
@@ -559,7 +532,7 @@ class DateTimeValidator:
 # Convenience functions for common validations
 def validate_trading_session(session: TradingSession) -> Tuple[bool, Dict[str, List[str]]]:
     """
-    Validate a complete trading session with RELAXED rules.
+    Validate a complete trading session.
     
     Args:
         session: TradingSession to validate
@@ -572,7 +545,7 @@ def validate_trading_session(session: TradingSession) -> Tuple[bool, Dict[str, L
 
 def validate_for_analysis(session: TradingSession) -> Tuple[bool, List[str]]:
     """
-    Check if a session is ready for analysis with RELAXED rules.
+    Check if a session is ready for analysis.
     
     Args:
         session: TradingSession to check
@@ -583,43 +556,47 @@ def validate_for_analysis(session: TradingSession) -> Tuple[bool, List[str]]:
     return TradingSessionValidator.validate_for_analysis(session)
 
 
-# Optional: Function to temporarily disable validation
-def validate_trading_session_lenient(session: TradingSession) -> Tuple[bool, Dict[str, List[str]]]:
+# In the PriceLevelValidator class, update validate_price_level method:
+
+@staticmethod
+def validate_price_level(level: PriceLevel, session_date: Optional[date] = None) -> List[str]:
     """
-    Ultra-lenient validation - only check critical fields.
-    Use this for debugging or when you need to save partial data.
+    Validate a single price level.
     
     Args:
-        session: TradingSession to validate
+        level: PriceLevel object to validate
+        session_date: Session date (not used for validation anymore)
         
     Returns:
-        Tuple of (is_valid, errors_dict) - almost always returns True
+        List of validation errors (empty if valid)
     """
-    errors = {
-        'overview': [],
-        'weekly': [],
-        'daily': [],
-        'metrics': [],
-        'levels': []
-    }
+    errors = []
     
-    # Only validate the absolute minimum
     try:
-        # Must have a ticker
-        if not session.ticker:
-            errors['overview'].append("Ticker is required")
+        # Validate prices are positive
+        if level.line_price <= 0:
+            errors.append("Line price must be positive")
+        if level.candle_high <= 0:
+            errors.append("Candle high must be positive")
+        if level.candle_low <= 0:
+            errors.append("Candle low must be positive")
         
-        # Must have a valid date
-        if not session.date:
-            errors['overview'].append("Date is required")
-            
+        # Validate high >= low
+        if level.candle_high < level.candle_low:
+            errors.append("Candle high must be >= candle low")
+        
+        # Validate line price is within candle range (with small tolerance)
+        tolerance = Decimal("0.01")
+        if not (level.candle_low - tolerance <= level.line_price <= level.candle_high + tolerance):
+            errors.append("Line price should be within candle range")
+        
+        # Validate level_id format
+        if not re.match(r'^[A-Z0-9]+\.\d{6}_L\d{3}$', level.level_id):
+            errors.append(f"Invalid level_id format: {level.level_id}")
+        
+        # NO MORE DATETIME VALIDATION - removed completely
+        
     except Exception as e:
-        logger.warning(f"Lenient validation encountered error: {e}")
-        # Even if there's an error, we'll allow it
+        errors.append(f"Validation error: {str(e)}")
     
-    # Log any issues but still return valid
-    if any(error_list for error_list in errors.values()):
-        logger.warning(f"Lenient validation found issues: {errors}")
-    
-    # Always return True for lenient validation
-    return True, errors
+    return errors

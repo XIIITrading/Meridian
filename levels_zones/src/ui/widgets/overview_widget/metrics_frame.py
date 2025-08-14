@@ -1,3 +1,5 @@
+# levels_zones/src/ui/widgets/overview_widget/metrics_frame.py
+
 """
 Metrics frame for the Overview Widget
 Displays ATR metrics and price levels
@@ -42,21 +44,21 @@ class MetricsFrame(QFrame):
         self.atr_5min.setPlaceholderText("Calculated")
         layout.addWidget(self.atr_5min, 1, 1)
         
-        # 10-Minute ATR
-        layout.addWidget(QLabel("10-Minute ATR:"), 1, 2)
-        self.atr_10min = QLineEdit()
-        self.atr_10min.setReadOnly(True)
-        self.atr_10min.setStyleSheet(DarkStyleSheets.INPUT_FIELD)
-        self.atr_10min.setPlaceholderText("Calculated")
-        layout.addWidget(self.atr_10min, 1, 3)
-        
-        # 15-Minute ATR
-        layout.addWidget(QLabel("15-Minute ATR:"), 2, 0)
+        # 15-Minute ATR (moved to position 2)
+        layout.addWidget(QLabel("15-Minute ATR:"), 1, 2)
         self.atr_15min = QLineEdit()
         self.atr_15min.setReadOnly(True)
         self.atr_15min.setStyleSheet(DarkStyleSheets.INPUT_FIELD)
         self.atr_15min.setPlaceholderText("Calculated")
-        layout.addWidget(self.atr_15min, 2, 1)
+        layout.addWidget(self.atr_15min, 1, 3)
+        
+        # 2-Hour ATR (replacing 10-minute)
+        layout.addWidget(QLabel("2-Hour ATR:"), 2, 0)
+        self.atr_2hour = QLineEdit()
+        self.atr_2hour.setReadOnly(True)
+        self.atr_2hour.setStyleSheet(DarkStyleSheets.INPUT_FIELD)
+        self.atr_2hour.setPlaceholderText("Calculated")
+        layout.addWidget(self.atr_2hour, 2, 1)
         
         # Daily ATR
         layout.addWidget(QLabel("Daily ATR:"), 2, 2)
@@ -104,8 +106,8 @@ class MetricsFrame(QFrame):
         """Update all metric displays with calculated values"""
         if 'atr_5min' in metrics:
             self.atr_5min.setText(f"{metrics['atr_5min']:.2f}")
-        if 'atr_10min' in metrics:
-            self.atr_10min.setText(f"{metrics['atr_10min']:.2f}")
+        if 'atr_2hour' in metrics:  # Changed from atr_10min
+            self.atr_2hour.setText(f"{metrics['atr_2hour']:.2f}")
         if 'atr_15min' in metrics:
             self.atr_15min.setText(f"{metrics['atr_15min']:.2f}")
         if 'daily_atr' in metrics:
@@ -122,7 +124,7 @@ class MetricsFrame(QFrame):
     def clear_all(self):
         """Clear all metric displays"""
         self.atr_5min.clear()
-        self.atr_10min.clear()
+        self.atr_2hour.clear()  # Changed from atr_10min
         self.atr_15min.clear()
         self.daily_atr.clear()
         self.current_price.clear()

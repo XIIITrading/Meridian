@@ -1,64 +1,65 @@
 #!/usr/bin/env python3
 """
-Quick launcher for Meridian Pre-Market Trading System
-Save as: run_zones.py (in the Meridian root directory)
+Launcher script for Meridian Pre-Market Trading System
 """
 
 import sys
 import os
 from pathlib import Path
+import traceback
 
 def run_meridian():
-    """Launch the Meridian Trading System"""
-    
-    # Find the levels_zones directory
-    script_dir = Path(__file__).parent
-    levels_zones_dir = script_dir / "levels_zones"
-    
-    # Check if levels_zones directory exists
-    if not levels_zones_dir.exists():
-        print(f"❌ Error: levels_zones directory not found at {levels_zones_dir}")
-        print("Make sure you're running this from the Meridian root directory")
-        sys.exit(1)
-    
-    # Change to levels_zones directory
-    os.chdir(levels_zones_dir)
-    
-    # Add levels_zones to Python path
-    sys.path.insert(0, str(levels_zones_dir))
-    
-    print("=" * 60)
-    print("🚀 Launching Meridian Pre-Market Trading System")
-    print("=" * 60)
-    print(f"📁 Working directory: {levels_zones_dir}")
-    
+    """Run the Meridian trading system with proper path configuration"""
     try:
+        # Set UTF-8 encoding for Windows
+        if sys.platform == 'win32':
+            import locale
+            locale.setlocale(locale.LC_ALL, 'en_US.UTF-8')
+            
+        print("=" * 60)
+        print("LAUNCHING MERIDIAN PRE-MARKET TRADING SYSTEM")
+        print("=" * 60)
+        
+        # Get the directory containing this script
+        current_dir = Path(__file__).parent.resolve()
+        
+        # Add the levels_zones directory to path
+        levels_zones_dir = current_dir / 'levels_zones'
+        if levels_zones_dir.exists():
+            sys.path.insert(0, str(levels_zones_dir))
+            sys.path.insert(0, str(levels_zones_dir / 'src'))
+            print(f"Working directory: {levels_zones_dir}")
+        else:
+            print(f"ERROR: Directory not found: {levels_zones_dir}")
+            return
+        
+        # Change to the levels_zones directory
+        os.chdir(levels_zones_dir)
+        
         # Import and run the main application
+        print("Starting application...")
         from main import main
-        print("✓ Starting application...")
         main()
         
     except ImportError as e:
-        print(f"❌ Import Error: {e}")
+        print(f"ERROR: Import error - {e}")
         print("\nTroubleshooting:")
-        print("1. Check that levels_zones/main.py exists")
-        print("2. Verify all dependencies are installed")
-        print("3. Make sure you have a virtual environment activated")
-        sys.exit(1)
-        
-    except KeyboardInterrupt:
-        print("\n👋 Application closed by user")
-        sys.exit(0)
+        print("1. Check that all required packages are installed")
+        print("2. Run: pip install -r requirements.txt")
+        print(f"\nTraceback:\n{traceback.format_exc()}")
         
     except Exception as e:
-        print(f"❌ Error starting application: {e}")
+        print(f"ERROR starting application: {e}")
         print("\nTroubleshooting:")
         print("1. Check your .env file has the required API keys")
-        print("2. Ensure Supabase and Polygon credentials are valid") 
+        print("2. Ensure Supabase and Polygon credentials are valid")
         print("3. Make sure the Polygon REST API server is running")
-        import traceback
-        traceback.print_exc()
-        sys.exit(1)
+        print(f"\nTraceback:\n{traceback.format_exc()}")
 
 if __name__ == "__main__":
+    # Set output encoding for Windows
+    if sys.platform == 'win32':
+        sys.stdout.reconfigure(encoding='utf-8')
+        sys.stderr.reconfigure(encoding='utf-8')
+    
     run_meridian()

@@ -199,9 +199,13 @@ class PolygonBridge:
         
         # Map timeframe format if needed
         timeframe_map = {
+            '1min': '1min',
             '5min': '5min',
             '10min': '10min', 
             '15min': '15min',
+            '30min': '30min',
+            '60min': '60min',  # 1 hour
+            '120min': '120min', # 2 hours (if Polygon supports it)
             'day': '1day',
             '1day': '1day'
         }
@@ -284,8 +288,8 @@ class PolygonBridge:
             return None
     
     def get_session_data(self, 
-                        symbol: str,
-                        session_datetime: datetime) -> Dict[str, Any]:
+                    symbol: str,
+                    session_datetime: datetime) -> Dict[str, Any]:
         """
         Get all required data for a trading session.
         
@@ -303,7 +307,7 @@ class PolygonBridge:
             'pre_market_price': None,
             'open_price': None,
             'atr_5min': None,
-            'atr_10min': None,
+            'atr_2hour': None,  # CHANGED from atr_10min
             'atr_15min': None,
             'daily_atr': None,
             'atr_high': None,
@@ -379,11 +383,11 @@ class PolygonBridge:
                 if not session_day_data.empty:
                     result['pre_market_price'] = Decimal(str(session_day_data.iloc[0]['open']))
             
-            # Fetch 10-minute data (aggregate from 5-min if not available)
-            logger.info(f"Calculating 10-minute ATR for {symbol}")
+            # Calculate 2-hour ATR from 5-min data (CHANGED from 10-minute)
+            logger.info(f"Calculating 2-hour ATR for {symbol}")
             if df_5min is not None and not df_5min.empty:
-                # Resample 5-min to 10-min
-                df_10min = df_5min.resample('10min').agg({
+                # Resample 5-min to 2-hour
+                df_2hour = df_5min.resample('2H').agg({  # '2H' for 2-hour periods
                     'open': 'first',
                     'high': 'max',
                     'low': 'min',
@@ -391,8 +395,8 @@ class PolygonBridge:
                     'volume': 'sum'
                 }).dropna()
                 
-                if not df_10min.empty:
-                    result['atr_10min'] = self.calculate_atr(df_10min, period=14)
+                if not df_2hour.empty:
+                    result['atr_2hour'] = self.calculate_atr(df_2hour, period=14)
             
             # Fetch 15-minute data
             logger.info(f"Fetching 15-minute data for {symbol}")

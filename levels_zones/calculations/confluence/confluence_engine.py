@@ -25,6 +25,9 @@ class SourceType(Enum):
     CAMARILLA_WEEKLY = "camarilla_weekly"
     CAMARILLA_MONTHLY = "camarilla_monthly"
     DAILY_LEVELS = "daily_levels"
+    WEEKLY_ZONES = "weekly_zones" 
+    DAILY_ZONES = "daily_zones"
+    ATR_ZONES = "atr_zones"  # NEW: Add ATR zones source type
     ATR_LEVELS = "atr_levels"
     REFERENCE_PRICES = "reference_prices"
 
@@ -40,11 +43,15 @@ class ConfluenceLevel(Enum):
 
 @dataclass(frozen=True, kw_only=True)
 class ConfluenceInput:
-    """Represents a single confluence input (price level from any source)"""
+    """Represents a single confluence input (price level or zone from any source)"""
     price: Decimal
     source_type: SourceType
-    level_name: str  # e.g., "Peak_1", "R3", "Daily_A1", "ATR_High"
+    level_name: str  # e.g., "Peak_1", "R3", "Daily_A1", "ATR_High", "Weekly_WL1"
     weight: float = 1.0  # For future weighted scoring enhancement
+    # NEW: Add zone boundaries for zone-based inputs
+    zone_low: Optional[Decimal] = None
+    zone_high: Optional[Decimal] = None
+    is_zone: bool = False  # Flag to indicate if this is a zone rather than a level
     
     def __post_init__(self):
         """Validate input data"""
@@ -52,6 +59,12 @@ class ConfluenceInput:
             raise ValueError(f"Price must be positive, got {self.price}")
         if not self.level_name.strip():
             raise ValueError("Level name cannot be empty")
+        # Validate zone data if it's a zone
+        if self.is_zone:
+            if not self.zone_low or not self.zone_high:
+                raise ValueError("Zone inputs must have zone_low and zone_high")
+            if self.zone_high <= self.zone_low:
+                raise ValueError(f"Zone high ({self.zone_high}) must be > zone low ({self.zone_low})")
 
 
 @dataclass(kw_only=True)
@@ -63,6 +76,7 @@ class M15ZoneScore:
     confluence_count: int = 0
     confluent_inputs: List[ConfluenceInput] = field(default_factory=list)
     confluence_level: ConfluenceLevel = ConfluenceLevel.L1
+    score: float = 0.0  # NEW: Add numerical score for more granular ranking
     
     def __post_init__(self):
         """Validate zone data"""
@@ -85,22 +99,68 @@ class M15ZoneScore:
         """Check if a price falls within this zone"""
         return self.zone_low <= price <= self.zone_high
     
-    def add_confluence(self, confluence_input: ConfluenceInput) -> None:
-        """Add a confluence input to this zone"""
-        if self.contains_price(confluence_input.price):
-            self.confluent_inputs.append(confluence_input)
-            self.confluence_count = len(self.confluent_inputs)
-            self._update_confluence_level()
+    def overlaps_zone(self, zone_low: Decimal, zone_high: Decimal, 
+                     overlap_threshold: float = 0.2) -> bool:
+        """
+        Check if another zone overlaps with this zone
+        
+        Args:
+            zone_low: Low boundary of the other zone
+            zone_high: High boundary of the other zone
+            overlap_threshold: Minimum overlap percentage to count as overlap (0.2 = 20%)
+        
+        Returns:
+            True if zones overlap by at least the threshold percentage
+        """
+        # Calculate overlap
+        overlap_low = max(self.zone_low, zone_low)
+        overlap_high = min(self.zone_high, zone_high)
+        
+        if overlap_high <= overlap_low:
+            return False  # No overlap
+        
+        # Calculate overlap percentage relative to this zone's width
+        overlap_width = overlap_high - overlap_low
+        overlap_pct = float(overlap_width / self.zone_width)
+        
+        return overlap_pct >= overlap_threshold
+    
+    def add_confluence(self, confluence_input: ConfluenceInput, 
+                      weight_multiplier: float = 1.0) -> None:
+        """
+        Add a confluence input to this zone
+        
+        Args:
+            confluence_input: The confluence input to add
+            weight_multiplier: Additional weight multiplier for this input
+        """
+        # Check if it's a zone input or level input
+        if confluence_input.is_zone:
+            # For zone inputs, check overlap
+            if self.overlaps_zone(confluence_input.zone_low, confluence_input.zone_high):
+                self.confluent_inputs.append(confluence_input)
+                self.confluence_count = len(self.confluent_inputs)
+                # Zones get higher scores
+                self.score += confluence_input.weight * weight_multiplier * 2.0
+                self._update_confluence_level()
+        else:
+            # For level inputs, check if price is within zone
+            if self.contains_price(confluence_input.price):
+                self.confluent_inputs.append(confluence_input)
+                self.confluence_count = len(self.confluent_inputs)
+                self.score += confluence_input.weight * weight_multiplier
+                self._update_confluence_level()
     
     def _update_confluence_level(self) -> None:
-        """Update confluence level based on count"""
-        if self.confluence_count >= 8:
+        """Update confluence level based on score"""
+        # Using score-based levels for better granularity
+        if self.score >= 16:
             self.confluence_level = ConfluenceLevel.L5
-        elif self.confluence_count >= 6:
+        elif self.score >= 12:
             self.confluence_level = ConfluenceLevel.L4
-        elif self.confluence_count >= 4:
+        elif self.score >= 8:
             self.confluence_level = ConfluenceLevel.L3
-        elif self.confluence_count >= 2:
+        elif self.score >= 4:
             self.confluence_level = ConfluenceLevel.L2
         else:
             self.confluence_level = ConfluenceLevel.L1
@@ -116,10 +176,10 @@ class ConfluenceResult:
     input_summary: Dict[SourceType, int] = field(default_factory=dict)
     
     def get_ranked_zones(self) -> List[M15ZoneScore]:
-        """Get zones ranked by price (highest first)"""
+        """Get zones ranked by score (highest first)"""
         return sorted(
             self.zone_scores,
-            key=lambda z: float(z.zone_center),
+            key=lambda z: (z.score, float(z.zone_center)),
             reverse=True
         )
     
@@ -133,14 +193,29 @@ class ConfluenceEngine:
     Calculates confluence scores for M15 zones based on alignment with other technical levels.
     
     This engine takes M15 zone data and checks how many other technical analysis levels
-    (HVN peaks, Camarilla pivots, daily levels, ATR levels) fall within each zone's price range.
-    Each confluent level adds 1 point to the zone's score, which is then converted to
-    a confluence level (L1-L5) for easy ranking.
+    (HVN peaks, Camarilla pivots, daily levels, weekly zones, ATR levels) fall within 
+    each zone's price range. Zone overlaps are weighted higher than single level confluences.
     """
     
     def __init__(self):
         """Initialize confluence engine"""
         self.logger = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
+        
+        # Define scoring weights for different sources
+        self.source_weights = {
+            SourceType.WEEKLY_ZONES: 3.0,      # High weight for weekly zones
+            SourceType.HVN_7DAY: 2.5,
+            SourceType.HVN_14DAY: 2.5,
+            SourceType.HVN_30DAY: 2.5,
+            SourceType.DAILY_ZONES: 2.0,       # Daily zones weight
+            SourceType.ATR_ZONES: 1.5,         # NEW: ATR zones weight - between daily zones and camarilla
+            SourceType.CAMARILLA_WEEKLY: 2.0,
+            SourceType.CAMARILLA_MONTHLY: 2.0,
+            SourceType.CAMARILLA_DAILY: 1.5,
+            SourceType.DAILY_LEVELS: 1.5,
+            SourceType.ATR_LEVELS: 1.0,
+            SourceType.REFERENCE_PRICES: 0.5
+        }
         
     def calculate_confluence(
         self,
@@ -148,6 +223,9 @@ class ConfluenceEngine:
         hvn_results: Optional[Dict[int, TimeframeResult]] = None,
         camarilla_results: Optional[Dict[str, CamarillaResult]] = None,
         daily_levels: Optional[List[float]] = None,
+        weekly_zones: Optional[List[Dict[str, Any]]] = None,
+        daily_zones: Optional[List[Dict[str, Any]]] = None,
+        atr_zones: Optional[List[Dict[str, Any]]] = None,    # NEW: Add ATR zones parameter
         metrics: Optional[Dict[str, float]] = None
     ) -> ConfluenceResult:
         """
@@ -158,6 +236,9 @@ class ConfluenceEngine:
             hvn_results: Dictionary mapping timeframe days to HVN results
             camarilla_results: Dictionary mapping timeframes to Camarilla results  
             daily_levels: List of 6 daily price levels (3 above, 3 below)
+            weekly_zones: List of weekly zone dictionaries with 'name', 'high', 'low', etc.
+            daily_zones: List of daily zone dictionaries with 'name', 'high', 'low', etc.
+            atr_zones: List of ATR zone dictionaries with 'name', 'high', 'low', etc.
             metrics: Dictionary with ATR and price metrics
             
         Returns:
@@ -176,15 +257,19 @@ class ConfluenceEngine:
             hvn_results=hvn_results,
             camarilla_results=camarilla_results,
             daily_levels=daily_levels,
+            weekly_zones=weekly_zones,
+            daily_zones=daily_zones,
+            atr_zones=atr_zones,           # NEW: Pass ATR zones
             metrics=metrics
         )
         
         self.logger.info(f"Collected {len(all_inputs)} confluence inputs from {len(set(inp.source_type for inp in all_inputs))} sources")
         
-        # Step 3: Check each input against each zone
+        # Step 3: Check each input against each zone with weighted scoring
         for confluence_input in all_inputs:
+            weight = self.source_weights.get(confluence_input.source_type, 1.0)
             for zone_score in zone_scores:
-                zone_score.add_confluence(confluence_input)
+                zone_score.add_confluence(confluence_input, weight_multiplier=weight)
         
         # Step 4: Create summary statistics
         result = ConfluenceResult(
@@ -196,7 +281,7 @@ class ConfluenceEngine:
         
         # Find highest confluence zone
         if result.zone_scores:
-            highest_zone = max(result.zone_scores, key=lambda z: z.confluence_count)
+            highest_zone = max(result.zone_scores, key=lambda z: z.score)
             result.highest_confluence_zone = highest_zone.zone_number
         
         self.logger.info(f"Confluence calculation complete: {result.zones_with_confluence}/{len(zone_scores)} zones have confluence")
@@ -247,6 +332,9 @@ class ConfluenceEngine:
         hvn_results: Optional[Dict[int, TimeframeResult]] = None,
         camarilla_results: Optional[Dict[str, CamarillaResult]] = None,
         daily_levels: Optional[List[float]] = None,
+        weekly_zones: Optional[List[Dict[str, Any]]] = None,
+        daily_zones: Optional[List[Dict[str, Any]]] = None,
+        atr_zones: Optional[List[Dict[str, Any]]] = None,    # NEW: Add ATR zones parameter
         metrics: Optional[Dict[str, float]] = None
     ) -> List[ConfluenceInput]:
         """Collect all confluence inputs from various sources"""
@@ -263,12 +351,126 @@ class ConfluenceEngine:
         # Collect daily level inputs
         if daily_levels:
             all_inputs.extend(self._collect_daily_level_inputs(daily_levels))
-        
+
+        # Collect weekly zone inputs
+        if weekly_zones:
+            all_inputs.extend(self._collect_weekly_zone_inputs(weekly_zones))
+
+        # Collect daily zone inputs
+        if daily_zones:
+            all_inputs.extend(self._collect_daily_zone_inputs(daily_zones))
+
+        # NEW: Collect ATR zone inputs
+        if atr_zones:
+            all_inputs.extend(self._collect_atr_zone_inputs(atr_zones))
+
         # Collect ATR and reference price inputs
         if metrics:
             all_inputs.extend(self._collect_metrics_inputs(metrics))
         
         return all_inputs
+    
+    def _collect_weekly_zone_inputs(self, weekly_zones: List[Dict[str, Any]]) -> List[ConfluenceInput]:
+        """
+        Collect weekly zones as confluence inputs
+        These are zones, not single levels, so they have high/low boundaries
+        """
+        inputs = []
+        
+        for zone in weekly_zones:
+            try:
+                zone_name = zone.get('name', 'Unknown')
+                zone_low = zone.get('low', 0)
+                zone_high = zone.get('high', 0)
+                zone_center = zone.get('level', zone.get('center', 0))
+                
+                if zone_low and zone_high and zone_low > 0 and zone_high > 0:
+                    # Create a zone-based confluence input
+                    inputs.append(ConfluenceInput(
+                        price=Decimal(str(zone_center if zone_center else (zone_low + zone_high) / 2)),
+                        source_type=SourceType.WEEKLY_ZONES,
+                        level_name=zone_name,
+                        zone_low=Decimal(str(zone_low)),
+                        zone_high=Decimal(str(zone_high)),
+                        is_zone=True,
+                        weight=1.5  # Weekly zones get higher base weight
+                    ))
+                    self.logger.debug(f"Added weekly zone {zone_name}: {zone_low:.2f}-{zone_high:.2f}")
+                    
+            except (ValueError, TypeError) as e:
+                self.logger.warning(f"Skipping invalid weekly zone: {e}")
+                continue
+        
+        self.logger.info(f"Collected {len(inputs)} weekly zones for confluence")
+        return inputs
+    
+    def _collect_daily_zone_inputs(self, daily_zones: List[Dict[str, Any]]) -> List[ConfluenceInput]:
+        """
+        Collect daily zones as confluence inputs
+        These are zones with high/low boundaries based on 15-min ATR
+        """
+        inputs = []
+        
+        for zone in daily_zones:
+            try:
+                zone_name = zone.get('name', 'Unknown')
+                zone_low = zone.get('low', 0)
+                zone_high = zone.get('high', 0)
+                zone_center = zone.get('level', zone.get('center', 0))
+                
+                if zone_low and zone_high and zone_low > 0 and zone_high > 0:
+                    # Create a zone-based confluence input
+                    inputs.append(ConfluenceInput(
+                        price=Decimal(str(zone_center if zone_center else (zone_low + zone_high) / 2)),
+                        source_type=SourceType.DAILY_ZONES,
+                        level_name=zone_name,
+                        zone_low=Decimal(str(zone_low)),
+                        zone_high=Decimal(str(zone_high)),
+                        is_zone=True,
+                        weight=1.2  # Daily zones get moderate base weight (lower than weekly)
+                    ))
+                    self.logger.debug(f"Added daily zone {zone_name}: {zone_low:.2f}-{zone_high:.2f}")
+                    
+            except (ValueError, TypeError) as e:
+                self.logger.warning(f"Skipping invalid daily zone: {e}")
+                continue
+        
+        self.logger.info(f"Collected {len(inputs)} daily zones for confluence")
+        return inputs
+    
+    def _collect_atr_zone_inputs(self, atr_zones: List[Dict[str, Any]]) -> List[ConfluenceInput]:
+        """
+        NEW: Collect ATR zones as confluence inputs
+        These are dynamic volatility-based zones with high/low boundaries
+        """
+        inputs = []
+        
+        for zone in atr_zones:
+            try:
+                zone_name = zone.get('name', 'Unknown')
+                zone_low = zone.get('low', 0)
+                zone_high = zone.get('high', 0)
+                zone_center = zone.get('level', zone.get('center', 0))
+                
+                if zone_low and zone_high and zone_low > 0 and zone_high > 0:
+                    # Create a zone-based confluence input
+                    inputs.append(ConfluenceInput(
+                        price=Decimal(str(zone_center if zone_center else (zone_low + zone_high) / 2)),
+                        source_type=SourceType.ATR_ZONES,
+                        level_name=zone_name,
+                        zone_low=Decimal(str(zone_low)),
+                        zone_high=Decimal(str(zone_high)),
+                        is_zone=True,
+                        weight=1.0  # ATR zones get moderate base weight
+                    ))
+                    self.logger.debug(f"Added ATR zone {zone_name}: {zone_low:.2f}-{zone_high:.2f}")
+                    
+            except (ValueError, TypeError) as e:
+                self.logger.warning(f"Skipping invalid ATR zone: {e}")
+                continue
+        
+        self.logger.info(f"Collected {len(inputs)} ATR zones for confluence")
+        return inputs
     
     def _collect_hvn_inputs(self, hvn_results: Dict[int, TimeframeResult]) -> List[ConfluenceInput]:
         """Collect HVN peak prices as confluence inputs"""
@@ -434,15 +636,32 @@ class ConfluenceEngine:
         if result.input_summary:
             output.append(f"\nInput Sources:")
             for source_type, count in result.input_summary.items():
-                output.append(f"  • {source_type.value}: {count} levels")
+                source_name = source_type.value.replace('_', ' ').title()
+                # Handle zone vs level terminology - UPDATED to include ATR_ZONES
+                if source_type in [SourceType.WEEKLY_ZONES, SourceType.DAILY_ZONES, SourceType.ATR_ZONES]:
+                    output.append(f"  • {source_name}: {count} zones")
+                else:
+                    output.append(f"  • {source_name}: {count} levels")
         
-        output.append(f"\nRanked Zones:")
+        output.append(f"\nRanked Zones (by Score):")
         output.append("-" * 60)
         
         # Show ranked zones
         ranked_zones = result.get_ranked_zones()
         for zone in ranked_zones:
-            stars = "⭐" * min(zone.confluence_count, 5)  # Max 5 stars
+            # Show score-based stars
+            if zone.score >= 16:
+                stars = "⭐⭐⭐⭐⭐"
+            elif zone.score >= 12:
+                stars = "⭐⭐⭐⭐"
+            elif zone.score >= 8:
+                stars = "⭐⭐⭐"
+            elif zone.score >= 4:
+                stars = "⭐⭐"
+            elif zone.score > 0:
+                stars = "⭐"
+            else:
+                stars = ""
             
             direction = ""
             if current_price:
@@ -455,9 +674,9 @@ class ConfluenceEngine:
             
             output.append(f"\nZone {zone.zone_number} ({zone.confluence_level.value}): "
                          f"${zone.zone_low:.2f}-${zone.zone_high:.2f} - "
-                         f"{zone.confluence_count} Confluences {stars}{direction}")
+                         f"Score: {zone.score:.1f} {stars}{direction}")
             
-            # Show confluent inputs
+            # Show confluent inputs, highlighting zones
             if zone.confluent_inputs:
                 # Group by source type for cleaner display
                 by_source = {}
@@ -467,8 +686,25 @@ class ConfluenceEngine:
                     by_source[inp.source_type].append(inp)
                 
                 for source_type, inputs in by_source.items():
-                    input_names = [inp.level_name for inp in inputs]
-                    output.append(f"  • {source_type.value}: {', '.join(input_names)}")
+                    source_name = source_type.value.replace('_', ' ').title()
+                    
+                    # Special formatting for zone types to show overlap
+                    if source_type in [SourceType.WEEKLY_ZONES, SourceType.DAILY_ZONES, SourceType.ATR_ZONES]:
+                        zone_details = []
+                        for inp in inputs:
+                            if inp.is_zone:
+                                zone_details.append(f"{inp.level_name} (${inp.zone_low:.2f}-${inp.zone_high:.2f})")
+                            else:
+                                zone_details.append(inp.level_name)
+                        output.append(f"  • {source_name}: {', '.join(zone_details)} 🔄")  # 🔄 indicates zone overlap
+                    else:
+                        input_names = [inp.level_name for inp in inputs]
+                        output.append(f"  • {source_name}: {', '.join(input_names)}")
+        
+        # Add legend
+        output.append("\n" + "-" * 60)
+        output.append("Legend: L1=Minimal, L2=Low, L3=Medium, L4=High, L5=Highest")
+        output.append("🔄 = Zone Overlap (higher weight)")
         
         return "\n".join(output)
 
@@ -485,6 +721,18 @@ if __name__ == "__main__":
         {'zone_number': 3, 'high': '255.10', 'low': '253.40'},
     ]
     
+    # Mock weekly zones
+    mock_weekly_zones = [
+        {'name': 'Weekly_WL1', 'high': 251.00, 'low': 248.00, 'level': 249.50},
+        {'name': 'Weekly_WL2', 'high': 246.00, 'low': 243.00, 'level': 244.50},
+    ]
+    
+    # Mock ATR zones
+    mock_atr_zones = [
+        {'name': 'ATR_High_Zone', 'high': 252.18, 'low': 251.82, 'level': 252.00},
+        {'name': 'ATR_Low_Zone', 'high': 243.18, 'low': 242.82, 'level': 243.00},
+    ]
+    
     mock_metrics = {
         'current_price': 247.50,
         'atr_high': 250.25,
@@ -496,6 +744,8 @@ if __name__ == "__main__":
     engine = ConfluenceEngine()
     result = engine.calculate_confluence(
         m15_zones=mock_zones,
+        weekly_zones=mock_weekly_zones,
+        atr_zones=mock_atr_zones,  # Include ATR zones
         metrics=mock_metrics
     )
     

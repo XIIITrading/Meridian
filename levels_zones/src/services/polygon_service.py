@@ -46,7 +46,7 @@ class PolygonDataWorker(QThread):
         except Exception as e:
             logger.error(f"Worker error in {self.operation}: {str(e)}")
             self.error.emit(str(e))
-    
+
     def _fetch_and_calculate(self):
         """Fetch all data and calculate metrics"""
         ticker = self.params['ticker']
@@ -55,17 +55,14 @@ class PolygonDataWorker(QThread):
         self.progress.emit(10, f"Fetching data for {ticker}...")
         
         # Everything is in UTC - no timezone conversions needed
-        # Market hours in UTC: 14:30 - 21:00 (9:30 AM - 4:00 PM ET)
         market_open_utc = time(14, 30)  # 9:30 AM ET in UTC
         session_time = session_datetime.time()
         is_pre_market = session_time < market_open_utc
         
         # Calculate date ranges
         session_date = session_datetime.date()
-        
-        # For ATR calculations, we need historical data
         end_date = session_date
-        start_date_5min = end_date - timedelta(days=30)  # Get 30 days for calculations
+        start_date = end_date - timedelta(days=30)  # Get 30 days for calculations
         
         results = {
             'ticker': ticker,
@@ -78,35 +75,29 @@ class PolygonDataWorker(QThread):
             self.progress.emit(20, "Fetching 5-minute data...")
             data_5min = self.bridge.get_historical_bars(
                 ticker=ticker,
-                start_date=start_date_5min,
+                start_date=start_date,
                 end_date=end_date,
-                timeframe='5min'
+                timeframe='5min'  # Native 5-minute bars
             )
             
+            # Fetch 15-minute data DIRECTLY from Polygon
+            self.progress.emit(30, "Fetching 15-minute data...")
+            data_15min = self.bridge.get_historical_bars(
+                ticker=ticker,
+                start_date=start_date,
+                end_date=end_date,
+                timeframe='15min'  # Native 15-minute bars
+            )
+            
+            # Calculate 5-minute ATR
             if not data_5min.empty:
-                # Strip timezone info if present to work in naive UTC
                 if data_5min.index.tz is not None:
                     data_5min.index = data_5min.index.tz_localize(None)
                 
-                # Calculate ATRs
-                self.progress.emit(40, "Calculating ATR values...")
-                
-                # 5-minute ATR (14 periods)
                 atr_5min = self._calculate_atr(data_5min, period=14)
                 results['metrics']['atr_5min'] = float(atr_5min)
                 
-                # 10-minute ATR (resample and calculate)
-                data_10min = self._resample_data(data_5min, '10min')
-                atr_10min = self._calculate_atr(data_10min, period=14)
-                results['metrics']['atr_10min'] = float(atr_10min)
-                
-                # 15-minute ATR (resample and calculate)
-                data_15min = self._resample_data(data_5min, '15min')
-                atr_15min = self._calculate_atr(data_15min, period=14)
-                results['metrics']['atr_15min'] = float(atr_15min)
-                
                 # Get current price at specified datetime
-                self.progress.emit(60, "Getting price data...")
                 current_price = self._get_price_at_datetime(data_5min, session_datetime)
                 results['metrics']['current_price'] = float(current_price)
                 
@@ -115,8 +106,29 @@ class PolygonDataWorker(QThread):
                     open_price = self._get_session_open_price(data_5min, session_date)
                     results['metrics']['open_price'] = float(open_price)
                 else:
-                    # For pre-market, current price is the pre-market price
                     results['metrics']['pre_market_price'] = float(current_price)
+            
+            # Calculate 15-minute ATR from native 15-min bars
+            if not data_15min.empty:
+                if data_15min.index.tz is not None:
+                    data_15min.index = data_15min.index.tz_localize(None)
+                
+                atr_15min = self._calculate_atr(data_15min, period=14)
+                results['metrics']['atr_15min'] = float(atr_15min)
+            
+            # For 2-hour ATR
+            self.progress.emit(40, "Calculating 2-hour ATR...")
+            if not data_15min.empty:
+                # Resample 15-min to 2-hour (8 bars = 2 hours)
+                data_2hour = self._resample_data(data_15min, '2H')
+                if len(data_2hour) >= 14:
+                    atr_2hour = self._calculate_atr(data_2hour, period=14)
+                    results['metrics']['atr_2hour'] = float(atr_2hour)
+                    logger.info(f"Calculated 2-hour ATR: {atr_2hour:.2f}")
+                else:
+                    # Not enough 2-hour bars, use what we have
+                    atr_2hour = self._calculate_atr(data_2hour, period=min(14, len(data_2hour)-1))
+                    results['metrics']['atr_2hour'] = float(atr_2hour)
             
             # Fetch daily data for daily ATR
             self.progress.emit(70, "Fetching daily data...")
@@ -125,11 +137,10 @@ class PolygonDataWorker(QThread):
                 ticker=ticker,
                 start_date=start_date_daily,
                 end_date=end_date,
-                timeframe='day'
+                timeframe='day'  # Native daily bars
             )
             
             if not data_daily.empty:
-                # Strip timezone info if present
                 if data_daily.index.tz is not None:
                     data_daily.index = data_daily.index.tz_localize(None)
                 
@@ -147,6 +158,7 @@ class PolygonDataWorker(QThread):
             
             # Store data for HVN analysis
             results['data_5min'] = data_5min
+            results['data_15min'] = data_15min  # Store native 15-min data
             results['data_daily'] = data_daily
             
             self.progress.emit(100, "Data fetch complete!")

@@ -7,6 +7,7 @@ from datetime import datetime, date, time
 import logging
 from decimal import Decimal
 from typing import Optional, Dict, Any
+import traceback
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QLabel, QTextEdit, QScrollArea, QMessageBox,
@@ -67,6 +68,7 @@ class OverviewWidget(QWidget):
         self.session_info.run_analysis_btn.clicked.connect(self._on_run_analysis)
         self.session_info.fetch_data_btn.clicked.connect(self._fetch_market_data)
         self.session_info.save_to_db_btn.clicked.connect(self._on_save_to_database)
+        self.session_info.clear_all_btn.clicked.connect(self._on_clear_all)  # NEW CONNECTION
         container_layout.addWidget(self.session_info)
         
         # Metrics section
@@ -205,8 +207,8 @@ class OverviewWidget(QWidget):
         self.weekly_frame.eow_bias.currentTextChanged.connect(lambda: self.data_changed.emit())
         self.weekly_frame.notes.textChanged.connect(lambda: self.data_changed.emit())
         
-        # Connect weekly price levels (NEW)
-        for level in self.weekly_frame.price_levels:
+        # Connect weekly price levels
+        for level in self.weekly_frame.weekly_levels:
             level.valueChanged.connect(lambda: self.data_changed.emit())
         
         self.daily_frame.trend_direction.currentTextChanged.connect(lambda: self.data_changed.emit())
@@ -284,7 +286,7 @@ class OverviewWidget(QWidget):
         import sys
         from pathlib import Path
         
-        # Navigate to project root - this is the exact path that works
+        # Navigate to project root
         widget_dir = Path(__file__).parent
         project_root = widget_dir.parent.parent.parent.parent
         
@@ -340,11 +342,8 @@ class OverviewWidget(QWidget):
             for zone_idx, candle_data in results:
                 if candle_data:
                     # Update the table cells
-                    # Level = Mid price (calculated as (high + low) / 2)
                     self.zone_table.item(zone_idx, 3).setText(f"{candle_data['mid']:.2f}")
-                    # Zone High = Candle High
                     self.zone_table.item(zone_idx, 4).setText(f"{candle_data['high']:.2f}")
-                    # Zone Low = Candle Low
                     self.zone_table.item(zone_idx, 5).setText(f"{candle_data['low']:.2f}")
                     
                     # Set text color to indicate successful fetch
@@ -356,8 +355,8 @@ class OverviewWidget(QWidget):
                     # Check if this zone had valid date/time
                     zone = zones[zone_idx]
                     if zone.get('date') and zone.get('time') and \
-                    zone['date'] != 'yyyy-mm-dd' and \
-                    zone['time'] not in ['hh:mm:ss', 'hh:mm:ss UTC']:
+                       zone['date'] != 'yyyy-mm-dd' and \
+                       zone['time'] not in ['hh:mm:ss', 'hh:mm:ss UTC']:
                         failed_zones.append(f"Zone {zone_idx + 1}: {zone['date']} {zone['time']}")
             
             # Show results
@@ -372,12 +371,12 @@ class OverviewWidget(QWidget):
                 
                 if failed_zones:
                     message += f"\n\nNo data found for {len(failed_zones)} zone(s):\n"
-                    message += "\n".join(failed_zones[:5])  # Show first 5
+                    message += "\n".join(failed_zones[:5])
                     if len(failed_zones) > 5:
                         message += f"\n... and {len(failed_zones) - 5} more"
                 
                 QMessageBox.information(self, "Query Complete", message)
-                self.data_changed.emit()  # Signal that data has changed
+                self.data_changed.emit()
             else:
                 QMessageBox.warning(
                     self, 
@@ -421,74 +420,167 @@ class OverviewWidget(QWidget):
     
     @pyqtSlot()
     def _on_save_to_database(self):
-        """Handle save to database button click"""
+        """Handle save to database button click with detailed debugging"""
+        logger.info("="*60)
+        logger.info("OVERVIEW WIDGET: SAVE TO DATABASE INITIATED")
+        logger.info("="*60)
+        
         # Validate required fields
-        if not self.session_info.ticker_input.text().strip():
+        ticker = self.session_info.ticker_input.text().strip()
+        if not ticker:
+            logger.warning("No ticker entered")
             QMessageBox.warning(self, "Missing Data", "Please enter a ticker symbol.")
             return
         
-        # Collect all data
-        data = self.collect_session_data()
+        logger.info(f"Ticker: {ticker}")
         
-        # Emit signal for database save
-        self.save_to_database.emit(data)
+        try:
+            # Collect all data with logging
+            logger.info("Collecting session data from UI...")
+            data = self.collect_session_data()
+            
+            # Log what we collected
+            logger.debug("Collected session data structure:")
+            self._log_collected_data(data)
+            
+            # Emit signal for database save
+            logger.info("Emitting save_to_database signal...")
+            self.save_to_database.emit(data)
+            logger.info("Signal emitted successfully")
+            
+        except Exception as e:
+            logger.error(f"Exception during data collection: {e}")
+            logger.error(f"Traceback:\n{traceback.format_exc()}")
+            QMessageBox.critical(
+                self,
+                "Error",
+                f"An error occurred while collecting data:\n{str(e)}\n\nCheck console for details."
+            )
+        finally:
+            logger.info("="*60)
+            logger.info("SAVE HANDLER COMPLETE")
+            logger.info("="*60)
+    
+    @pyqtSlot()
+    def _on_clear_all(self):
+        """Handle clear all button click"""
+        reply = QMessageBox.question(
+            self, 
+            'Clear All Data', 
+            'Are you sure you want to clear all data?',
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        
+        if reply == QMessageBox.StandardButton.Yes:
+            self.clear_all()
+            self.statusBar().showMessage("All data cleared", 3000)
+    
+    def _log_collected_data(self, data: Dict[str, Any], indent: int = 0):
+        """Helper to log collected data structure"""
+        prefix = "  " * indent
+        for key, value in data.items():
+            if isinstance(value, dict):
+                logger.debug(f"{prefix}{key}: <dict> with {len(value)} keys")
+                if indent < 2:  # Limit depth
+                    self._log_collected_data(value, indent + 1)
+            elif isinstance(value, list):
+                logger.debug(f"{prefix}{key}: <list> with {len(value)} items")
+                if value and len(value) > 0:
+                    if isinstance(value[0], dict) and indent < 2:
+                        logger.debug(f"{prefix}  [0]:")
+                        self._log_collected_data(value[0], indent + 2)
+                    elif not isinstance(value[0], dict):
+                        sample = value[:3] if len(value) > 3 else value
+                        logger.debug(f"{prefix}  Sample: {sample}")
+            elif isinstance(value, datetime):
+                logger.debug(f"{prefix}{key}: {value.isoformat()} (datetime)")
+            else:
+                if isinstance(value, str) and len(value) > 50:
+                    logger.debug(f"{prefix}{key}: '{value[:50]}...' (str, {len(value)} chars)")
+                else:
+                    logger.debug(f"{prefix}{key}: {value} ({type(value).__name__})")
     
     def validate_and_save(self):
         """Validate data and trigger save (called from main window)"""
         self._on_save_to_database()
     
     def collect_session_data(self) -> Dict[str, Any]:
-        """Collect all session data from the widget"""
+        """Collect all session data from the widget with debugging"""
+        logger.debug("Starting data collection...")
+        
         # Get current price from metrics if available
         current_price_text = self.metrics_frame.current_price.text()
         pre_market_price = 0
         if current_price_text:
             try:
                 pre_market_price = float(current_price_text)
+                logger.debug(f"Pre-market price: {pre_market_price}")
             except ValueError:
-                pass
+                logger.warning(f"Could not parse pre-market price: {current_price_text}")
         
         # Combine date and time
         date = self.session_info.date_input.date().toPyDate()
         time = self.session_info.time_input.time().toPyTime()
         datetime_val = datetime.combine(date, time)
+        logger.debug(f"DateTime: {datetime_val}")
         
         # Collect metrics data
         metrics_data = {}
         
         # Helper function to safely get float value from QLineEdit
-        def get_metric_value(widget):
+        def get_metric_value(widget, name):
             text = widget.text().strip()
             if text:
                 try:
-                    return float(text)
+                    value = float(text)
+                    logger.debug(f"  {name}: {value}")
+                    return value
                 except ValueError:
+                    logger.warning(f"  {name}: Could not parse '{text}'")
                     return 0.0
+            logger.debug(f"  {name}: Empty")
             return 0.0
         
         # Collect all metric values
-        metrics_data['atr_5min'] = get_metric_value(self.metrics_frame.atr_5min)
-        metrics_data['atr_10min'] = get_metric_value(self.metrics_frame.atr_10min)
-        metrics_data['atr_15min'] = get_metric_value(self.metrics_frame.atr_15min)
-        metrics_data['daily_atr'] = get_metric_value(self.metrics_frame.daily_atr)
-        metrics_data['atr_high'] = get_metric_value(self.metrics_frame.atr_high)
-        metrics_data['atr_low'] = get_metric_value(self.metrics_frame.atr_low)
+        logger.debug("Collecting metrics...")
+        metrics_data['atr_5min'] = get_metric_value(self.metrics_frame.atr_5min, "atr_5min")
+        metrics_data['atr_10min'] = get_metric_value(self.metrics_frame.atr_10min, "atr_10min")
+        metrics_data['atr_15min'] = get_metric_value(self.metrics_frame.atr_15min, "atr_15min")
+        metrics_data['daily_atr'] = get_metric_value(self.metrics_frame.daily_atr, "daily_atr")
+        metrics_data['atr_high'] = get_metric_value(self.metrics_frame.atr_high, "atr_high")
+        metrics_data['atr_low'] = get_metric_value(self.metrics_frame.atr_low, "atr_low")
         
-        # Use current price as pre-market price if available
-        if pre_market_price == 0 and metrics_data.get('current_price'):
-            pre_market_price = metrics_data['current_price']
+        # Collect weekly data
+        logger.debug("Collecting weekly data...")
+        weekly_data = self.weekly_frame.get_data()
+        logger.debug(f"  Weekly data keys: {list(weekly_data.keys())}")
         
-        return {
+        # Collect daily data
+        logger.debug("Collecting daily data...")
+        daily_data = self.daily_frame.get_data()
+        logger.debug(f"  Daily data keys: {list(daily_data.keys())}")
+        
+        # Collect zones
+        logger.debug("Collecting zone data...")
+        zones_data = self.zone_table.get_zone_data()
+        logger.debug(f"  Zones: {len(zones_data)} zones collected")
+        
+        # Build final data structure
+        session_data = {
             'ticker': self.session_info.ticker_input.text().strip().upper(),
             'is_live': self.session_info.live_toggle.isChecked(),
             'datetime': datetime_val,
-            'weekly': self.weekly_frame.get_data(),
-            'daily': self.daily_frame.get_data(),
-            'zones': self.zone_table.get_zone_data(),
+            'weekly': weekly_data,
+            'daily': daily_data,
+            'zones': zones_data,
             'pre_market_price': pre_market_price,
-            'metrics': metrics_data,  # Add metrics to the data
+            'metrics': metrics_data,
             'timestamp': datetime.now()
         }
+        
+        logger.debug("Data collection complete")
+        return session_data
     
     def load_session_data(self, session_data: Dict[str, Any]):
         """Load session data into the UI"""
@@ -534,8 +626,8 @@ class OverviewWidget(QWidget):
             if 'price_levels' in weekly:
                 levels = weekly['price_levels']
                 for i, level in enumerate(levels[:4]):  # Load up to 4 levels
-                    if i < len(self.weekly_frame.price_levels):
-                        self.weekly_frame.price_levels[i].setValue(float(level))
+                    if i < len(self.weekly_frame.weekly_levels):
+                        self.weekly_frame.weekly_levels[i].setValue(float(level))
         
         # Load daily data
         if 'daily' in session_data and session_data['daily']:
@@ -560,12 +652,9 @@ class OverviewWidget(QWidget):
             # Load price levels
             if 'price_levels' in daily:
                 levels = daily['price_levels']
-                for i, level in enumerate(levels[:3]):  # Above levels
-                    if i < len(self.daily_frame.above_levels):
-                        self.daily_frame.above_levels[i].setValue(float(level))
-                for i, level in enumerate(levels[3:6]):  # Below levels
-                    if i < len(self.daily_frame.below_levels):
-                        self.daily_frame.below_levels[i].setValue(float(level))
+                for i, level in enumerate(levels[:6]):  # Load up to 6 levels
+                    if i < len(self.daily_frame.price_levels):
+                        self.daily_frame.price_levels[i].setValue(float(level))
         
         # Load zones
         if 'zones' in session_data and session_data['zones']:
@@ -608,6 +697,8 @@ class OverviewWidget(QWidget):
         if 'ticker' in session_data:
             self._fetch_market_data()
     
+    # In levels_zones/src/ui/widgets/overview_widget/app_overview.py
+
     def update_calculations(self, results: Dict[str, Any]):
         """Update calculation displays with analysis results"""
         # Update metrics
@@ -630,12 +721,36 @@ class OverviewWidget(QWidget):
         if 'cam_daily' in results:
             self.calculations.cam_daily.text_area.setText(results['cam_daily'])
         
+        # Update Zone displays
+        if 'weekly_zones' in results:
+            self.calculations.weekly_zones.text_area.setText(results['weekly_zones'])
+        
+        # Update Daily Zones display
+        if 'daily_zones' in results:
+            self.calculations.daily_zones.text_area.setText(results['daily_zones'])
+        
+        # Update ATR Zones Display - NOW FULLY IMPLEMENTED
+        if 'atr_zones' in results:
+            self.calculations.atr_zones.text_area.setText(results['atr_zones'])
+        else:
+            # Show informative message if ATR zones couldn't be calculated
+            self.calculations.atr_zones.text_area.setText(
+                "ATR Zones: Pending calculation\n\n"
+                "ATR zones require:\n"
+                "• Daily ATR value\n"
+                "• 5-minute ATR value\n"
+                "• Current price\n\n"
+                "These will be calculated during analysis."
+            )
+        
         # Update zones ranking
         if 'zones_ranked' in results:
             self.zones_ranked.setText(results['zones_ranked'])
+
     
     def clear_all(self):
-        """Clear all input fields"""
+        """Clear all input fields and results"""
+        # Clear session info
         self.session_info.ticker_input.clear()
         self.session_info.live_toggle.setChecked(True)
         self.session_info.date_input.setDate(QDate.currentDate())
@@ -653,11 +768,46 @@ class OverviewWidget(QWidget):
         # Clear table
         self.zone_table.clear_all_zones()
         
-        # Clear calculations
+        # Clear calculations - ALL displays including zones
         self.calculations.hvn_7day.text_area.clear()
         self.calculations.hvn_14day.text_area.clear()
         self.calculations.hvn_30day.text_area.clear()
         self.calculations.cam_monthly.text_area.clear()
         self.calculations.cam_weekly.text_area.clear()
         self.calculations.cam_daily.text_area.clear()
+        self.calculations.weekly_zones.text_area.clear()
+        self.calculations.daily_zones.text_area.clear()
+        self.calculations.atr_zones.text_area.clear()  # Only need this once
+        
+        # Clear zones ranked
         self.zones_ranked.clear()
+        
+        # Reset placeholders for HVN
+        self.calculations.hvn_7day.text_area.setPlaceholderText("HVN 7-day analysis will appear here...")
+        self.calculations.hvn_14day.text_area.setPlaceholderText("HVN 14-day analysis will appear here...")
+        self.calculations.hvn_30day.text_area.setPlaceholderText("HVN 30-day analysis will appear here...")
+        
+        # Reset placeholders for Camarilla
+        self.calculations.cam_monthly.text_area.setPlaceholderText("Monthly Camarilla pivots will appear here...")
+        self.calculations.cam_weekly.text_area.setPlaceholderText("Weekly Camarilla pivots will appear here...")
+        self.calculations.cam_daily.text_area.setPlaceholderText("Daily Camarilla pivots will appear here...")
+        
+        # Reset placeholders for Zones
+        self.calculations.weekly_zones.text_area.setPlaceholderText("Weekly zones will appear here after analysis...\n\nCreated from WL1-WL4 ± 2-Hour ATR")
+        self.calculations.daily_zones.text_area.setPlaceholderText("Daily zones will appear here after analysis...\n\nCreated from DL1-DL6 ± 15-Minute ATR")
+        self.calculations.atr_zones.text_area.setPlaceholderText(
+            "ATR Zones will appear here after analysis...\n\n"
+            "Dynamic zones based on:\n"
+            "• ATR High: Current + Daily ATR ± 5min ATR\n"
+            "• ATR Low: Current - Daily ATR ± 5min ATR"
+        )
+        
+        # Reset zones ranked placeholder
+        self.zones_ranked.setPlaceholderText("M15 Zones Confluence Ranking will appear here after analysis...")
+        
+        # Emit data changed signal to reset the modified flag
+        self.data_changed.emit()
+    
+        
+        # Emit data changed signal to reset the modified flag
+        self.data_changed.emit()

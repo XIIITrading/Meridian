@@ -56,19 +56,26 @@ LOG_LEVEL = logging.DEBUG if DEBUG_MODE else logging.INFO
 LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 
 # Validate required settings
+# In config.py, add this validation function if it doesn't exist:
+
 def validate_config():
     """Validate that required configuration is present"""
-    errors = []
-    
     if not SUPABASE_URL:
-        errors.append("SUPABASE_URL not set in environment")
-    if not SUPABASE_KEY:
-        errors.append("SUPABASE_KEY not set in environment")
-    
-    if errors:
-        for error in errors:
-            logging.error(error)
+        logger.error("SUPABASE_URL is not set in configuration")
         return False
+    
+    if not SUPABASE_KEY:
+        logger.error("SUPABASE_KEY is not set in configuration")
+        return False
+    
+    # Check URL format
+    if not SUPABASE_URL.startswith('https://'):
+        logger.error("SUPABASE_URL should start with https://")
+        return False
+    
+    if '.supabase.co' not in SUPABASE_URL:
+        logger.warning("SUPABASE_URL doesn't look like a Supabase URL")
+    
     return True
 
 # Initialize logging

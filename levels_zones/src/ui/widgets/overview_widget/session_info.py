@@ -70,13 +70,37 @@ class SessionInfoFrame(QFrame):
         # Spacer
         layout.addStretch()
         
-        # Run Analysis Button (NOW FIRST)
+        # Run Analysis Button
         self.run_analysis_btn = QPushButton("Run Analysis")
         self.run_analysis_btn.setStyleSheet(DarkStyleSheets.BUTTON_PRIMARY)
         self.run_analysis_btn.setMinimumWidth(120)
         layout.addWidget(self.run_analysis_btn)
         
-        # Save to Supabase Button (NOW SECOND - TO THE RIGHT)
+        # Clear All Button (NEW - between Run Analysis and Save)
+        self.clear_all_btn = QPushButton("Clear All")
+        self.clear_all_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {DarkTheme.WARNING};
+                border: none;
+                border-radius: 3px;
+                color: white;
+                font-weight: bold;
+                padding: 8px 16px;
+                font-size: 12px;
+            }}
+            QPushButton:hover {{
+                background-color: #e68900;
+            }}
+            QPushButton:pressed {{
+                background-color: #cc7a00;
+            }}
+        """)
+        self.clear_all_btn.setMinimumWidth(100)
+        self.clear_all_btn.setToolTip("Clear all inputs and results (Ctrl+Shift+C)")
+        self.clear_all_btn.setShortcut("Ctrl+Shift+C")
+        layout.addWidget(self.clear_all_btn)
+        
+        # Save to Supabase Button
         self.save_to_db_btn = QPushButton("Save to Supabase")
         self.save_to_db_btn.setStyleSheet(f"""
             QPushButton {{

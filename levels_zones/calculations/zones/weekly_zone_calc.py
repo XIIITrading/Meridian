@@ -1,7 +1,7 @@
 """
 Weekly Zone Calculator
 Location: levels_zones/calculations/zones/weekly_zone_calc.py
-Transforms weekly levels (WL1-WL4) into zones using 2-hour ATR bands
+Transforms weekly levels (WL1-WL4) into zones using 1-hour ATR bands (30min above/below)
 """
 
 import logging
@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 
 class WeeklyZoneCalculator:
-    """Calculator for transforming weekly levels into zones using 2-hour ATR"""
+    """Calculator for transforming weekly levels into zones using 1-hour ATR"""
     
     def __init__(self):
         """Initialize the calculator with PolygonBridge"""
@@ -46,10 +46,10 @@ class WeeklyZoneCalculator:
         except Exception as e:
             return False, str(e)
     
-    def calculate_2hour_atr(self, ticker: str, analysis_date: datetime, period: int = 14) -> Optional[Decimal]:
+    def calculate_1hour_atr(self, ticker: str, analysis_date: datetime, period: int = 14) -> Optional[Decimal]:
         """
-        Calculate 2-hour ATR for the given ticker and date
-        Tries native 2-hour bars first, falls back to resampling from shorter timeframes
+        Calculate 1-hour ATR for the given ticker and date
+        Tries native 1-hour bars first, falls back to resampling from shorter timeframes
         
         Args:
             ticker: Stock ticker symbol
@@ -57,49 +57,49 @@ class WeeklyZoneCalculator:
             period: ATR period (default 14)
             
         Returns:
-            2-hour ATR value as Decimal or None if calculation fails
+            1-hour ATR value as Decimal or None if calculation fails
         """
         try:
             # Calculate date range
             end_date = analysis_date.date()
             # Need enough data for ATR calculation
-            # With ~4 2-hour bars per trading day, need about 5-7 days for 14 periods
+            # With ~7 1-hour bars per trading day, need about 3-4 days for 14 periods
             # Get extra to be safe
             start_date = end_date - timedelta(days=10)
             
-            logger.info(f"Attempting to fetch 2-hour bars for {ticker}")
+            logger.info(f"Attempting to fetch 1-hour bars for {ticker}")
             
-            # Try native 2-hour bars first (if Polygon supports it)
-            df_2hour = None
-            for timeframe in ['2hour', '120min', '2h']:  # Try different formats
+            # Try native 1-hour bars first (if Polygon supports it)
+            df_1hour = None
+            for timeframe in ['1hour', '60min', '1h']:  # Try different formats
                 try:
-                    df_2hour = self.bridge.get_historical_bars(
+                    df_1hour = self.bridge.get_historical_bars(
                         ticker=ticker,
                         start_date=start_date,
                         end_date=end_date,
                         timeframe=timeframe
                     )
-                    if df_2hour is not None and not df_2hour.empty:
-                        logger.info(f"Successfully fetched 2-hour bars using timeframe: {timeframe}")
+                    if df_1hour is not None and not df_1hour.empty:
+                        logger.info(f"Successfully fetched 1-hour bars using timeframe: {timeframe}")
                         break
                 except Exception as e:
                     logger.debug(f"Timeframe {timeframe} not available: {e}")
                     continue
             
-            # If native 2-hour bars are available and have enough data
-            if df_2hour is not None and not df_2hour.empty:
+            # If native 1-hour bars are available and have enough data
+            if df_1hour is not None and not df_1hour.empty:
                 # Strip timezone info if present
-                if df_2hour.index.tz is not None:
-                    df_2hour.index = df_2hour.index.tz_localize(None)
+                if df_1hour.index.tz is not None:
+                    df_1hour.index = df_1hour.index.tz_localize(None)
                 
-                if len(df_2hour) >= period + 1:
-                    logger.info(f"Using native 2-hour bars: {len(df_2hour)} bars available")
-                    return self._calculate_atr_from_data(df_2hour, period)
+                if len(df_1hour) >= period + 1:
+                    logger.info(f"Using native 1-hour bars: {len(df_1hour)} bars available")
+                    return self._calculate_atr_from_data(df_1hour, period)
                 else:
-                    logger.warning(f"Insufficient native 2-hour bars: {len(df_2hour)}, need {period + 1}")
+                    logger.warning(f"Insufficient native 1-hour bars: {len(df_1hour)}, need {period + 1}")
             
             # Fallback: Try 15-minute bars and resample
-            logger.info("Falling back to 15-minute bars for 2-hour ATR calculation")
+            logger.info("Falling back to 15-minute bars for 1-hour ATR calculation")
             
             # Extend date range for resampling to ensure enough data
             extended_start = end_date - timedelta(days=30)
@@ -116,8 +116,8 @@ class WeeklyZoneCalculator:
                 if df_15min.index.tz is not None:
                     df_15min.index = df_15min.index.tz_localize(None)
                 
-                # Resample to 2-hour (8 x 15min = 120min)
-                df_2hour_resampled = df_15min.resample('2H').agg({
+                # Resample to 1-hour (4 x 15min = 60min)
+                df_1hour_resampled = df_15min.resample('1H').agg({
                     'open': 'first',
                     'high': 'max',
                     'low': 'min',
@@ -125,14 +125,14 @@ class WeeklyZoneCalculator:
                     'volume': 'sum'
                 }).dropna()
                 
-                if len(df_2hour_resampled) >= period + 1:
-                    logger.info(f"Using resampled 2-hour bars from 15-min: {len(df_2hour_resampled)} bars")
-                    return self._calculate_atr_from_data(df_2hour_resampled, period)
+                if len(df_1hour_resampled) >= period + 1:
+                    logger.info(f"Using resampled 1-hour bars from 15-min: {len(df_1hour_resampled)} bars")
+                    return self._calculate_atr_from_data(df_1hour_resampled, period)
                 else:
-                    logger.warning(f"Still insufficient data after 15-min resampling: {len(df_2hour_resampled)}")
+                    logger.warning(f"Still insufficient data after 15-min resampling: {len(df_1hour_resampled)}")
             
             # Final fallback: Use 5-minute bars with extended range
-            logger.info("Final fallback to 5-minute bars for 2-hour ATR calculation")
+            logger.info("Final fallback to 5-minute bars for 1-hour ATR calculation")
             
             df_5min = self.bridge.get_historical_bars(
                 ticker=ticker,
@@ -146,8 +146,8 @@ class WeeklyZoneCalculator:
                 if df_5min.index.tz is not None:
                     df_5min.index = df_5min.index.tz_localize(None)
                 
-                # Resample to 2-hour (24 x 5min = 120min)
-                df_2hour_final = df_5min.resample('2H').agg({
+                # Resample to 1-hour (12 x 5min = 60min)
+                df_1hour_final = df_5min.resample('1H').agg({
                     'open': 'first',
                     'high': 'max',
                     'low': 'min',
@@ -155,21 +155,21 @@ class WeeklyZoneCalculator:
                     'volume': 'sum'
                 }).dropna()
                 
-                if len(df_2hour_final) >= period + 1:
-                    logger.info(f"Using resampled 2-hour bars from 5-min: {len(df_2hour_final)} bars")
-                    return self._calculate_atr_from_data(df_2hour_final, period)
-                elif len(df_2hour_final) > 0:
+                if len(df_1hour_final) >= period + 1:
+                    logger.info(f"Using resampled 1-hour bars from 5-min: {len(df_1hour_final)} bars")
+                    return self._calculate_atr_from_data(df_1hour_final, period)
+                elif len(df_1hour_final) > 0:
                     # Use what we have with reduced period
-                    reduced_period = min(period, len(df_2hour_final) - 1)
+                    reduced_period = min(period, len(df_1hour_final) - 1)
                     if reduced_period > 0:
                         logger.warning(f"Using reduced ATR period of {reduced_period} due to limited data")
-                        return self._calculate_atr_from_data(df_2hour_final, reduced_period)
+                        return self._calculate_atr_from_data(df_1hour_final, reduced_period)
             
-            logger.error(f"Unable to calculate 2-hour ATR for {ticker} - insufficient data")
+            logger.error(f"Unable to calculate 1-hour ATR for {ticker} - insufficient data")
             return None
             
         except Exception as e:
-            logger.error(f"Error calculating 2-hour ATR for {ticker}: {e}")
+            logger.error(f"Error calculating 1-hour ATR for {ticker}: {e}")
             return None
     
     def _calculate_atr_from_data(self, data: pd.DataFrame, period: int) -> Optional[Decimal]:
@@ -206,7 +206,7 @@ class WeeklyZoneCalculator:
                 return None
             
             atr_decimal = Decimal(str(round(latest_atr, 2)))
-            logger.info(f"Calculated 2-hour ATR: {atr_decimal}")
+            logger.info(f"Calculated 1-hour ATR: {atr_decimal}")
             
             return atr_decimal
             
@@ -216,15 +216,16 @@ class WeeklyZoneCalculator:
     
     def create_weekly_zones(self, 
                           weekly_levels: List[Decimal], 
-                          atr_2hour: Decimal,
-                          multiplier: Decimal = Decimal("1.0")) -> List[Dict[str, Decimal]]:
+                          atr_1hour: Decimal,
+                          multiplier: Decimal = Decimal("0.5")) -> List[Dict[str, Decimal]]:
         """
-        Create zones from weekly levels using 2-hour ATR
+        Create zones from weekly levels using 1-hour ATR
+        Uses 0.5 multiplier by default to create 30min above/below zones
         
         Args:
             weekly_levels: List of weekly price levels (WL1-WL4)
-            atr_2hour: 2-hour ATR value
-            multiplier: ATR multiplier (default 1.0, can adjust for wider/narrower zones)
+            atr_1hour: 1-hour ATR value
+            multiplier: ATR multiplier (default 0.5 for 30min zones above/below)
             
         Returns:
             List of zone dictionaries with high/low boundaries
@@ -233,8 +234,8 @@ class WeeklyZoneCalculator:
         
         for i, level in enumerate(weekly_levels, 1):
             if level and level > 0:
-                # Calculate zone boundaries
-                atr_offset = atr_2hour * multiplier
+                # Calculate zone boundaries - 30 minutes above and below
+                atr_offset = atr_1hour * multiplier
                 zone_high = level + atr_offset
                 zone_low = level - atr_offset
                 
@@ -244,12 +245,13 @@ class WeeklyZoneCalculator:
                     'high': zone_high,
                     'low': zone_low,
                     'zone_size': zone_high - zone_low,
-                    'atr_used': atr_2hour,
+                    'atr_used': atr_1hour,
+                    'atr_multiplier': multiplier,
                     'center': level  # Weekly level is the center of the zone
                 }
                 zones.append(zone)
                 
-                logger.debug(f"Created zone WL{i}: {zone_low:.2f} - {zone_high:.2f} (center: {level:.2f})")
+                logger.debug(f"Created zone WL{i}: {zone_low:.2f} - {zone_high:.2f} (center: {level:.2f}, total size: ~1hr ATR)")
         
         return zones
     
@@ -285,31 +287,31 @@ class WeeklyZoneCalculator:
             
             logger.info(f"Found {len(weekly_levels)} weekly levels: {[float(l) for l in weekly_levels]}")
             
-            # Check if we already have 2-hour ATR in metrics
-            atr_2hour = None
-            if 'metrics' in session_data and 'atr_2hour' in session_data['metrics']:
+            # Check if we already have 1-hour ATR in metrics
+            atr_1hour = None
+            if 'metrics' in session_data and 'atr_1hour' in session_data['metrics']:
                 try:
-                    atr_2hour = Decimal(str(session_data['metrics']['atr_2hour']))
-                    logger.info(f"Using existing 2-hour ATR from metrics: {atr_2hour}")
+                    atr_1hour = Decimal(str(session_data['metrics']['atr_1hour']))
+                    logger.info(f"Using existing 1-hour ATR from metrics: {atr_1hour}")
                 except (ValueError, TypeError):
-                    logger.warning("Invalid 2-hour ATR in metrics, will recalculate")
+                    logger.warning("Invalid 1-hour ATR in metrics, will recalculate")
             
-            # Calculate 2-hour ATR if not available
-            if not atr_2hour or atr_2hour <= 0:
-                atr_2hour = self.calculate_2hour_atr(ticker, analysis_datetime)
+            # Calculate 1-hour ATR if not available
+            if not atr_1hour or atr_1hour <= 0:
+                atr_1hour = self.calculate_1hour_atr(ticker, analysis_datetime)
                 
-                if not atr_2hour:
-                    logger.error("Failed to calculate 2-hour ATR")
-                    # Use a fallback: daily ATR * 0.3 as approximation
+                if not atr_1hour:
+                    logger.error("Failed to calculate 1-hour ATR")
+                    # Use a fallback: daily ATR * 0.15 as approximation
                     if 'metrics' in session_data and 'daily_atr' in session_data['metrics']:
                         daily_atr = Decimal(str(session_data['metrics']['daily_atr']))
-                        atr_2hour = daily_atr * Decimal("0.3")
-                        logger.warning(f"Using fallback: 30% of daily ATR = {atr_2hour}")
+                        atr_1hour = daily_atr * Decimal("0.15")
+                        logger.warning(f"Using fallback: 15% of daily ATR = {atr_1hour}")
                     else:
                         return None
             
-            # Create zones
-            zones = self.create_weekly_zones(weekly_levels, atr_2hour)
+            # Create zones with 30min above/below (total ~1hr ATR zone)
+            zones = self.create_weekly_zones(weekly_levels, atr_1hour)
             
             # Get current price for reference
             current_price = Decimal("0")
@@ -342,7 +344,8 @@ class WeeklyZoneCalculator:
             result = {
                 'ticker': ticker,
                 'analysis_datetime': analysis_datetime,
-                'atr_2hour': atr_2hour,
+                'atr_1hour': atr_1hour,
+                'zone_width': 'approx_1hour_atr',
                 'current_price': current_price,
                 'all_zones': zones,
                 'resistance_zones': resistance_zones,
@@ -350,7 +353,7 @@ class WeeklyZoneCalculator:
                 'zone_count': len(zones)
             }
             
-            logger.info(f"Weekly zone calculation complete: {len(zones)} zones created with 2-hour ATR of {atr_2hour:.2f}")
+            logger.info(f"Weekly zone calculation complete: {len(zones)} zones created with 1-hour ATR of {atr_1hour:.2f} (30min above/below)")
             return result
             
         except Exception as e:
@@ -372,7 +375,8 @@ class WeeklyZoneCalculator:
         
         output = []
         output.append(f"Weekly Zones Analysis for {zone_result['ticker']}")
-        output.append(f"2-Hour ATR: ${zone_result['atr_2hour']:.2f}")
+        output.append(f"1-Hour ATR: ${zone_result['atr_1hour']:.2f}")
+        output.append(f"Zone Width: ~1 hour ATR (30min above + 30min below)")
         
         if zone_result['current_price'] > 0:
             output.append(f"Current Price: ${zone_result['current_price']:.2f}")
@@ -387,7 +391,7 @@ class WeeklyZoneCalculator:
                 output.append(f"\n  {zone['name']} Zone:")
                 output.append(f"    Level: ${zone['level']:.2f}")
                 output.append(f"    Zone: ${zone['low']:.2f} - ${zone['high']:.2f}")
-                output.append(f"    Size: ${zone['zone_size']:.2f}")
+                output.append(f"    Size: ${zone['zone_size']:.2f} (~1hr ATR)")
                 if 'distance_pct' in zone:
                     output.append(f"    Distance: {zone['distance_pct']:.2f}% above")
         
@@ -398,7 +402,7 @@ class WeeklyZoneCalculator:
                 output.append(f"\n  {zone['name']} Zone:")
                 output.append(f"    Level: ${zone['level']:.2f}")
                 output.append(f"    Zone: ${zone['low']:.2f} - ${zone['high']:.2f}")
-                output.append(f"    Size: ${zone['zone_size']:.2f}")
+                output.append(f"    Size: ${zone['zone_size']:.2f} (~1hr ATR)")
                 if 'distance_pct' in zone:
                     output.append(f"    Distance: {zone['distance_pct']:.2f}% below")
         
@@ -430,7 +434,9 @@ class WeeklyZoneCalculator:
                 'source': 'weekly_levels',
                 'timeframe': 'weekly',
                 'atr_based': True,
-                'atr_value': float(zone['atr_used'])
+                'atr_value': float(zone['atr_used']),
+                'atr_type': '1hour',
+                'zone_width': '30min_above_below'
             }
             
             # Add position relative to price if available
@@ -476,7 +482,7 @@ if __name__ == "__main__":
     print(f"Connection test: {msg}")
     
     if connected:
-        print("\nCalculating weekly zones...")
+        print("\nCalculating weekly zones with 1-hour ATR (30min above/below)...")
         
         # Calculate zones
         result = calculator.calculate_zones_from_session(

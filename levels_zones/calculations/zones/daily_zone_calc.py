@@ -1,7 +1,7 @@
 """
 Daily Zone Calculator
 Location: levels_zones/calculations/zones/daily_zone_calc.py
-Transforms daily levels (DL1-DL6) into zones using 15-minute ATR bands
+Transforms daily levels (DL1-DL6) into zones using 5-minute ATR bands (5min above/below)
 """
 
 import logging
@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 
 class DailyZoneCalculator:
-    """Calculator for transforming daily levels into zones using 15-minute ATR"""
+    """Calculator for transforming daily levels into zones using 5-minute ATR bands"""
     
     def __init__(self):
         """Initialize the calculator with PolygonBridge"""
@@ -46,9 +46,9 @@ class DailyZoneCalculator:
         except Exception as e:
             return False, str(e)
     
-    def calculate_15min_atr(self, ticker: str, analysis_date: datetime, period: int = 14) -> Optional[Decimal]:
+    def calculate_5min_atr(self, ticker: str, analysis_date: datetime, period: int = 14) -> Optional[Decimal]:
         """
-        Calculate 15-minute ATR for the given ticker and date
+        Calculate 5-minute ATR for the given ticker and date
         
         Args:
             ticker: Stock ticker symbol
@@ -56,88 +56,71 @@ class DailyZoneCalculator:
             period: ATR period (default 14)
             
         Returns:
-            15-minute ATR value as Decimal or None if calculation fails
+            5-minute ATR value as Decimal or None if calculation fails
         """
         try:
             # Calculate date range
             end_date = analysis_date.date()
-            # For 15-minute bars, we need less historical data than 2-hour
-            # ~26 15-min bars per trading day, need about 2-3 days for 14 periods
-            start_date = end_date - timedelta(days=5)
+            # For 5-minute bars, we have ~78 bars per trading day
+            # Need about 1-2 days for 14 periods
+            start_date = end_date - timedelta(days=3)
             
-            logger.info(f"Fetching 15-minute bars for {ticker}")
+            logger.info(f"Fetching 5-minute bars for {ticker}")
             
-            # Try native 15-minute bars first
-            df_15min = None
-            for timeframe in ['15min', '15', '15m']:  # Try different formats
+            # Try native 5-minute bars
+            df_5min = None
+            for timeframe in ['5min', '5', '5m']:  # Try different formats
                 try:
-                    df_15min = self.bridge.get_historical_bars(
+                    df_5min = self.bridge.get_historical_bars(
                         ticker=ticker,
                         start_date=start_date,
                         end_date=end_date,
                         timeframe=timeframe
                     )
-                    if df_15min is not None and not df_15min.empty:
-                        logger.info(f"Successfully fetched 15-minute bars using timeframe: {timeframe}")
+                    if df_5min is not None and not df_5min.empty:
+                        logger.info(f"Successfully fetched 5-minute bars using timeframe: {timeframe}")
                         break
                 except Exception as e:
                     logger.debug(f"Timeframe {timeframe} not available: {e}")
                     continue
             
-            # If native 15-minute bars are available and have enough data
-            if df_15min is not None and not df_15min.empty:
-                # Strip timezone info if present
-                if df_15min.index.tz is not None:
-                    df_15min.index = df_15min.index.tz_localize(None)
-                
-                if len(df_15min) >= period + 1:
-                    logger.info(f"Using native 15-minute bars: {len(df_15min)} bars available")
-                    return self._calculate_atr_from_data(df_15min, period)
-                else:
-                    logger.warning(f"Insufficient native 15-minute bars: {len(df_15min)}, need {period + 1}")
-            
-            # Fallback: Use 5-minute bars and resample
-            logger.info("Falling back to 5-minute bars for 15-minute ATR calculation")
-            
-            # Extend date range slightly for resampling
-            extended_start = end_date - timedelta(days=10)
-            
-            df_5min = self.bridge.get_historical_bars(
-                ticker=ticker,
-                start_date=extended_start,
-                end_date=end_date,
-                timeframe='5min'
-            )
-            
+            # If native 5-minute bars are available and have enough data
             if df_5min is not None and not df_5min.empty:
-                # Strip timezone info
+                # Strip timezone info if present
                 if df_5min.index.tz is not None:
                     df_5min.index = df_5min.index.tz_localize(None)
                 
-                # Resample to 15-minute (3 x 5min = 15min)
-                df_15min_resampled = df_5min.resample('15min').agg({
-                    'open': 'first',
-                    'high': 'max',
-                    'low': 'min',
-                    'close': 'last',
-                    'volume': 'sum'
-                }).dropna()
-                
-                if len(df_15min_resampled) >= period + 1:
-                    logger.info(f"Using resampled 15-minute bars from 5-min: {len(df_15min_resampled)} bars")
-                    return self._calculate_atr_from_data(df_15min_resampled, period)
-                elif len(df_15min_resampled) > 0:
-                    # Use what we have with reduced period
-                    reduced_period = min(period, len(df_15min_resampled) - 1)
-                    if reduced_period > 0:
-                        logger.warning(f"Using reduced ATR period of {reduced_period} due to limited data")
-                        return self._calculate_atr_from_data(df_15min_resampled, reduced_period)
+                if len(df_5min) >= period + 1:
+                    logger.info(f"Using native 5-minute bars: {len(df_5min)} bars available")
+                    return self._calculate_atr_from_data(df_5min, period)
+                else:
+                    logger.warning(f"Insufficient 5-minute bars: {len(df_5min)}, need {period + 1}")
+                    # Try extending the date range
+                    extended_start = end_date - timedelta(days=10)
+                    df_5min_extended = self.bridge.get_historical_bars(
+                        ticker=ticker,
+                        start_date=extended_start,
+                        end_date=end_date,
+                        timeframe='5min'
+                    )
+                    if df_5min_extended is not None and not df_5min_extended.empty:
+                        if df_5min_extended.index.tz is not None:
+                            df_5min_extended.index = df_5min_extended.index.tz_localize(None)
+                        if len(df_5min_extended) >= period + 1:
+                            logger.info(f"Using extended 5-minute bars: {len(df_5min_extended)} bars")
+                            return self._calculate_atr_from_data(df_5min_extended, period)
+                        elif len(df_5min_extended) > 0:
+                            # Use what we have with reduced period
+                            reduced_period = min(period, len(df_5min_extended) - 1)
+                            if reduced_period > 0:
+                                logger.warning(f"Using reduced ATR period of {reduced_period}")
+                                return self._calculate_atr_from_data(df_5min_extended, reduced_period)
             
-            logger.error(f"Unable to calculate 15-minute ATR for {ticker} - insufficient data")
+            logger.error(f"Unable to calculate 5-minute ATR for {ticker} - insufficient data")
             return None
             
         except Exception as e:
-            logger.error(f"Error calculating 15-minute ATR for {ticker}: {e}")
+            logger.error(f"Error calculating 5-minute ATR for {ticker}: {e}")
             return None
     
     def _calculate_atr_from_data(self, data: pd.DataFrame, period: int) -> Optional[Decimal]:
@@ -174,7 +157,7 @@ class DailyZoneCalculator:
                 return None
             
             atr_decimal = Decimal(str(round(latest_atr, 2)))
-            logger.info(f"Calculated 15-minute ATR: {atr_decimal}")
+            logger.info(f"Calculated 5-minute ATR: {atr_decimal}")
             
             return atr_decimal
             
@@ -184,15 +167,16 @@ class DailyZoneCalculator:
     
     def create_daily_zones(self, 
                           daily_levels: List[Decimal], 
-                          atr_15min: Decimal,
+                          atr_5min: Decimal,
                           multiplier: Decimal = Decimal("1.0")) -> List[Dict[str, Decimal]]:
         """
-        Create zones from daily levels using 15-minute ATR
+        Create zones from daily levels using 5-minute ATR
+        Creates zones with 5min ATR above and below (10min total zone)
         
         Args:
             daily_levels: List of daily price levels (DL1-DL6)
-            atr_15min: 15-minute ATR value
-            multiplier: ATR multiplier (default 1.0, can adjust for wider/narrower zones)
+            atr_5min: 5-minute ATR value
+            multiplier: ATR multiplier (default 1.0 for 5min above/below)
             
         Returns:
             List of zone dictionaries with high/low boundaries
@@ -201,8 +185,8 @@ class DailyZoneCalculator:
         
         for i, level in enumerate(daily_levels, 1):
             if level and level > 0:
-                # Calculate zone boundaries
-                atr_offset = atr_15min * multiplier
+                # Calculate zone boundaries - 5min ATR above and below
+                atr_offset = atr_5min * multiplier
                 zone_high = level + atr_offset
                 zone_low = level - atr_offset
                 
@@ -212,12 +196,13 @@ class DailyZoneCalculator:
                     'high': zone_high,
                     'low': zone_low,
                     'zone_size': zone_high - zone_low,
-                    'atr_used': atr_15min,
+                    'atr_used': atr_5min,
+                    'atr_multiplier': multiplier,
                     'center': level  # Daily level is the center of the zone
                 }
                 zones.append(zone)
                 
-                logger.debug(f"Created zone DL{i}: {zone_low:.2f} - {zone_high:.2f} (center: {level:.2f})")
+                logger.debug(f"Created zone DL{i}: {zone_low:.2f} - {zone_high:.2f} (center: {level:.2f}, 5min above/below)")
         
         return zones
     
@@ -253,34 +238,34 @@ class DailyZoneCalculator:
             
             logger.info(f"Found {len(daily_levels)} daily levels: {[float(l) for l in daily_levels]}")
             
-            # Check if we already have 15-minute ATR in metrics
-            atr_15min = None
-            if 'metrics' in session_data and 'atr_15min' in session_data['metrics']:
+            # Check if we already have 5-minute ATR in metrics
+            atr_5min = None
+            if 'metrics' in session_data and 'atr_5min' in session_data['metrics']:
                 try:
-                    atr_15min = Decimal(str(session_data['metrics']['atr_15min']))
-                    logger.info(f"Using existing 15-minute ATR from metrics: {atr_15min}")
+                    atr_5min = Decimal(str(session_data['metrics']['atr_5min']))
+                    logger.info(f"Using existing 5-minute ATR from metrics: {atr_5min}")
                 except (ValueError, TypeError):
-                    logger.warning("Invalid 15-minute ATR in metrics, will recalculate")
+                    logger.warning("Invalid 5-minute ATR in metrics, will recalculate")
             
-            # Calculate 15-minute ATR if not available
-            if not atr_15min or atr_15min <= 0:
-                atr_15min = self.calculate_15min_atr(ticker, analysis_datetime)
+            # Calculate 5-minute ATR if not available
+            if not atr_5min or atr_5min <= 0:
+                atr_5min = self.calculate_5min_atr(ticker, analysis_datetime)
                 
-                if not atr_15min:
-                    logger.error("Failed to calculate 15-minute ATR")
-                    # Use a fallback: 10% of daily ATR as approximation
+                if not atr_5min:
+                    logger.error("Failed to calculate 5-minute ATR")
+                    # Use a fallback: 3.3% of daily ATR as approximation (5min is ~1/78 of a day)
                     if 'metrics' in session_data and 'daily_atr' in session_data['metrics']:
                         daily_atr = Decimal(str(session_data['metrics']['daily_atr']))
-                        atr_15min = daily_atr * Decimal("0.1")
-                        logger.warning(f"Using fallback: 10% of daily ATR = {atr_15min}")
+                        atr_5min = daily_atr * Decimal("0.033")
+                        logger.warning(f"Using fallback: 3.3% of daily ATR = {atr_5min}")
                     else:
-                        # Final fallback: use a small percentage of the average level
+                        # Final fallback: use a very small percentage of the average level
                         avg_level = sum(daily_levels) / len(daily_levels)
-                        atr_15min = avg_level * Decimal("0.002")  # 0.2% of average level
-                        logger.warning(f"Using final fallback: 0.2% of average level = {atr_15min}")
+                        atr_5min = avg_level * Decimal("0.001")  # 0.1% of average level
+                        logger.warning(f"Using final fallback: 0.1% of average level = {atr_5min}")
             
-            # Create zones
-            zones = self.create_daily_zones(daily_levels, atr_15min)
+            # Create zones with 5min above and below
+            zones = self.create_daily_zones(daily_levels, atr_5min)
             
             # Get current price for reference
             current_price = Decimal("0")
@@ -313,7 +298,9 @@ class DailyZoneCalculator:
             result = {
                 'ticker': ticker,
                 'analysis_datetime': analysis_datetime,
-                'atr_15min': atr_15min,
+                'atr_5min': atr_5min,
+                'zone_width': '10min_total',
+                'zone_description': '5min_above_below',
                 'current_price': current_price,
                 'all_zones': zones,
                 'resistance_zones': resistance_zones,
@@ -321,7 +308,7 @@ class DailyZoneCalculator:
                 'zone_count': len(zones)
             }
             
-            logger.info(f"Daily zone calculation complete: {len(zones)} zones created with 15-minute ATR of {atr_15min:.2f}")
+            logger.info(f"Daily zone calculation complete: {len(zones)} zones created with 5-minute ATR of {atr_5min:.2f} (5min above/below)")
             return result
             
         except Exception as e:
@@ -343,7 +330,8 @@ class DailyZoneCalculator:
         
         output = []
         output.append(f"Daily Zones Analysis for {zone_result['ticker']}")
-        output.append(f"15-Minute ATR: ${zone_result['atr_15min']:.2f}")
+        output.append(f"5-Minute ATR: ${zone_result['atr_5min']:.2f}")
+        output.append(f"Zone Width: 10 minutes total (5min above + 5min below)")
         
         if zone_result['current_price'] > 0:
             output.append(f"Current Price: ${zone_result['current_price']:.2f}")
@@ -358,7 +346,7 @@ class DailyZoneCalculator:
                 output.append(f"\n  {zone['name']} Zone:")
                 output.append(f"    Level: ${zone['level']:.2f}")
                 output.append(f"    Zone: ${zone['low']:.2f} - ${zone['high']:.2f}")
-                output.append(f"    Size: ${zone['zone_size']:.2f}")
+                output.append(f"    Size: ${zone['zone_size']:.2f} (10min range)")
                 if 'distance_pct' in zone:
                     output.append(f"    Distance: {zone['distance_pct']:.2f}% above")
         
@@ -369,7 +357,7 @@ class DailyZoneCalculator:
                 output.append(f"\n  {zone['name']} Zone:")
                 output.append(f"    Level: ${zone['level']:.2f}")
                 output.append(f"    Zone: ${zone['low']:.2f} - ${zone['high']:.2f}")
-                output.append(f"    Size: ${zone['zone_size']:.2f}")
+                output.append(f"    Size: ${zone['zone_size']:.2f} (10min range)")
                 if 'distance_pct' in zone:
                     output.append(f"    Distance: {zone['distance_pct']:.2f}% below")
         
@@ -401,7 +389,9 @@ class DailyZoneCalculator:
                 'source': 'daily_levels',
                 'timeframe': 'daily',
                 'atr_based': True,
-                'atr_value': float(zone['atr_used'])
+                'atr_value': float(zone['atr_used']),
+                'atr_type': '5min',
+                'zone_width': '5min_above_below'
             }
             
             # Add position relative to price if available
@@ -434,7 +424,7 @@ if __name__ == "__main__":
         'pre_market_price': 176.00,
         'metrics': {
             'daily_atr': 2.50,  # Can be used as fallback
-            'atr_15min': 0.35   # If available, will be used directly
+            'atr_5min': 0.12   # If available, will be used directly
         }
     }
     
@@ -448,7 +438,7 @@ if __name__ == "__main__":
     print(f"Connection test: {msg}")
     
     if connected:
-        print("\nCalculating daily zones...")
+        print("\nCalculating daily zones with 5-minute ATR (5min above/below)...")
         
         # Calculate zones
         result = calculator.calculate_zones_from_session(

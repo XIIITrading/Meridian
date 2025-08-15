@@ -545,11 +545,12 @@ class OverviewWidget(QWidget):
         # Collect all metric values
         logger.debug("Collecting metrics...")
         metrics_data['atr_5min'] = get_metric_value(self.metrics_frame.atr_5min, "atr_5min")
-        metrics_data['atr_10min'] = get_metric_value(self.metrics_frame.atr_10min, "atr_10min")
+        # REMOVED: metrics_data['atr_10min'] = get_metric_value(self.metrics_frame.atr_10min, "atr_10min")
         metrics_data['atr_15min'] = get_metric_value(self.metrics_frame.atr_15min, "atr_15min")
         metrics_data['daily_atr'] = get_metric_value(self.metrics_frame.daily_atr, "daily_atr")
         metrics_data['atr_high'] = get_metric_value(self.metrics_frame.atr_high, "atr_high")
         metrics_data['atr_low'] = get_metric_value(self.metrics_frame.atr_low, "atr_low")
+
         
         # Collect weekly data
         logger.debug("Collecting weekly data...")

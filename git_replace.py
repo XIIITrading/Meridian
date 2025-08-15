@@ -11,7 +11,7 @@ import sys
 import os
 
 # GitHub repository configuration
-GITHUB_REPO_URL = "https://github.com/XIIITrading/Sirius.git"
+GITHUB_REPO_URL = "https://github.com/XIIITrading/Meridian.git"
 REMOTE_NAME = "origin"
 
 def run_command(command, description, capture_output=True):

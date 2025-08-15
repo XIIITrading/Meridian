@@ -1,0 +1,35 @@
+Overview
+ticker: AMD
+live: false
+date: 2025-08-13
+time: 12:30:00
+
+Weekly Analysis
+trend_direction: bull
+internal_trend: bull
+position_in_structure: 80
+eow_bias: bear
+wl1: 191.12
+wl2: 184.45
+wl3: 175.26
+wl4: 169.84
+
+Daily Analysis
+trend_direction: bull
+internal_direction: range
+position_in_structure: 50
+eod_bias: bull
+dl1: 193.52
+dl2: 187.03
+dl3: 181.92
+dl4: 177.45
+dl5: 172.45
+dl6: 168.95
+
+M15 Zones
+zl: 2025-07-31 08:00:00
+z2: 2025-07-31 12:00:00
+z3: 2025-08-05 09:30:00
+z4: 2025-08-11 08:00:00
+z5: 2025-08-12 12:30:00
+z6: 2025-08-13 10:15:00

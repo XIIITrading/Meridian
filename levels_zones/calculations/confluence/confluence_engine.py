@@ -27,7 +27,7 @@ class SourceType(Enum):
     DAILY_LEVELS = "daily_levels"
     WEEKLY_ZONES = "weekly_zones" 
     DAILY_ZONES = "daily_zones"
-    ATR_ZONES = "atr_zones"  # NEW: Add ATR zones source type
+    ATR_ZONES = "atr_zones"  
     ATR_LEVELS = "atr_levels"
     REFERENCE_PRICES = "reference_prices"
 
@@ -202,19 +202,27 @@ class ConfluenceEngine:
         self.logger = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
         
         # Define scoring weights for different sources
+
         self.source_weights = {
-            SourceType.WEEKLY_ZONES: 3.0,      # High weight for weekly zones
-            SourceType.HVN_7DAY: 2.5,
-            SourceType.HVN_14DAY: 2.5,
-            SourceType.HVN_30DAY: 2.5,
-            SourceType.DAILY_ZONES: 2.0,       # Daily zones weight
-            SourceType.ATR_ZONES: 1.5,         # NEW: ATR zones weight - between daily zones and camarilla
-            SourceType.CAMARILLA_WEEKLY: 2.0,
-            SourceType.CAMARILLA_MONTHLY: 2.0,
-            SourceType.CAMARILLA_DAILY: 1.5,
-            SourceType.DAILY_LEVELS: 1.5,
-            SourceType.ATR_LEVELS: 1.0,
-            SourceType.REFERENCE_PRICES: 0.5
+            # Major structural levels (8.0-10.0) - Game changers
+            SourceType.CAMARILLA_MONTHLY: 10.0,  # Monthly pivots - major institutions watch these
+            SourceType.HVN_30DAY: 8.0,           # Month of volume accumulation
+            
+            # Important swing levels (4.0-5.0) - Multi-day significance  
+            SourceType.WEEKLY_ZONES: 5.0,        # Weekly structure 
+            SourceType.CAMARILLA_WEEKLY: 4.5,    # Weekly pivots
+            SourceType.HVN_14DAY: 4.0,           # Two weeks of volume
+            
+            # Intraday context (1.5-2.5) - Day trading levels
+            SourceType.DAILY_ZONES: 2.5,         # Today's structure
+            SourceType.ATR_ZONES: 2.0,           # Dynamic volatility zones
+            SourceType.HVN_7DAY: 1.5,            # Recent week's volume
+            
+            # Minor levels (0.5-1.0) - Supporting information
+            SourceType.DAILY_LEVELS: 1.0,        # Basic support/resistance
+            SourceType.ATR_LEVELS: 1.0,          # ATR targets
+            SourceType.CAMARILLA_DAILY: 0.5,     # Too granular for primary use
+            SourceType.REFERENCE_PRICES: 0.25    # Just reference points
         }
         
     def calculate_confluence(

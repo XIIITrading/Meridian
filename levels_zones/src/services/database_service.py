@@ -219,9 +219,9 @@ class DatabaseService(QObject):
         else:
             logger.debug("  daily_data: None")
         
-        # Log metrics
+        # Log metrics - UPDATED to use atr_2hour
         logger.debug(f"  pre_market_price: {session.pre_market_price}")
-        logger.debug(f"  ATR metrics: 5m={session.atr_5min}, 10m={session.atr_10min}, 15m={session.atr_15min}")
+        logger.debug(f"  ATR metrics: 5m={session.atr_5min}, 2hr={session.atr_2hour}, 15m={session.atr_15min}")
         logger.debug(f"  daily_atr: {session.daily_atr}, high={session.atr_high}, low={session.atr_low}")
         
         # Log M15 levels
@@ -327,8 +327,9 @@ class DatabaseService(QObject):
             metrics = data['metrics']
             if 'atr_5min' in metrics:
                 session.atr_5min = Decimal(str(metrics['atr_5min']))
-            if 'atr_2hour' in metrics:  # CHANGED from atr_10min
-                session.atr_2hour = Decimal(str(metrics['atr_2hour']))  # Note: You'll need to add this field to the model
+            if 'atr_2hour' in metrics:  # Using atr_2hour consistently
+                session.atr_2hour = Decimal(str(metrics['atr_2hour']))
+                logger.debug(f"ATR 2-hour set: {session.atr_2hour}")
             if 'atr_15min' in metrics:
                 session.atr_15min = Decimal(str(metrics['atr_15min']))
             if 'daily_atr' in metrics:
@@ -337,6 +338,8 @@ class DatabaseService(QObject):
                 session.atr_high = Decimal(str(metrics['atr_high']))
             if 'atr_low' in metrics:
                 session.atr_low = Decimal(str(metrics['atr_low']))
+            
+            logger.debug(f"Metrics set - 5min: {session.atr_5min}, 2hr: {session.atr_2hour}, 15min: {session.atr_15min}")
         
         # Process M15 zones
         if data.get('zones'):
@@ -435,6 +438,20 @@ class DatabaseService(QObject):
             'datetime': datetime.combine(session.date, datetime.min.time()),
             'timestamp': session.created_at or datetime.now()
         }
+        
+        # Add metrics - UPDATED to use atr_2hour
+        ui_data['metrics'] = {
+            'atr_5min': float(session.atr_5min) if session.atr_5min else 0,
+            'atr_2hour': float(session.atr_2hour) if session.atr_2hour else 0,  # Changed from atr_10min
+            'atr_15min': float(session.atr_15min) if session.atr_15min else 0,
+            'daily_atr': float(session.daily_atr) if session.daily_atr else 0,
+            'atr_high': float(session.atr_high) if session.atr_high else 0,
+            'atr_low': float(session.atr_low) if session.atr_low else 0
+        }
+        
+        # Add pre-market price
+        if session.pre_market_price:
+            ui_data['pre_market_price'] = float(session.pre_market_price)
         
         # Add weekly data
         if session.weekly_data:

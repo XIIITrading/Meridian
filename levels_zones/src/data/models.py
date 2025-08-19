@@ -80,7 +80,7 @@ class WeeklyData:
     internal_trend: TrendDirection
     position_structure: float  # Percentage (0-100)
     eow_bias: TrendDirection  # End of Week bias
-    price_levels: List[Decimal] = field(default_factory=list)  # Add this line for wl1-wl4
+    price_levels: List[Decimal] = field(default_factory=list)  # For wl1-wl4
     notes: str = ""
     
     def __post_init__(self):
@@ -99,7 +99,7 @@ class WeeklyData:
             'internal_trend': self.internal_trend.value,
             'position_structure': self.position_structure,
             'eow_bias': self.eow_bias.value,
-            'price_levels': [str(level) for level in self.price_levels],  # Add this line
+            'price_levels': [str(level) for level in self.price_levels],
             'notes': self.notes
         }
     
@@ -111,7 +111,7 @@ class WeeklyData:
             internal_trend=TrendDirection(data['internal_trend']),
             position_structure=float(data['position_structure']),
             eow_bias=TrendDirection(data['eow_bias']),
-            price_levels=[Decimal(level) for level in data.get('price_levels', [])],  # Add this line
+            price_levels=[Decimal(level) for level in data.get('price_levels', [])],
             notes=data.get('notes', '')
         )
 
@@ -180,7 +180,7 @@ class TradingSession:
     # Metrics (all stored as strings for Decimal precision)
     pre_market_price: Decimal = field(default_factory=lambda: Decimal("0.00"))
     atr_5min: Decimal = field(default_factory=lambda: Decimal("0.00"))
-    atr_10min: Decimal = field(default_factory=lambda: Decimal("0.00"))
+    atr_2hour: Decimal = field(default_factory=lambda: Decimal("0.00"))  # CHANGED from atr_10min
     atr_15min: Decimal = field(default_factory=lambda: Decimal("0.00"))
     daily_atr: Decimal = field(default_factory=lambda: Decimal("0.00"))
     
@@ -204,7 +204,7 @@ class TradingSession:
         # Convert all price fields to Decimal
         self.pre_market_price = Decimal(str(self.pre_market_price))
         self.atr_5min = Decimal(str(self.atr_5min))
-        self.atr_10min = Decimal(str(self.atr_10min))
+        self.atr_2hour = Decimal(str(self.atr_2hour))  # CHANGED from atr_10min
         self.atr_15min = Decimal(str(self.atr_15min))
         self.daily_atr = Decimal(str(self.daily_atr))
         self.atr_high = Decimal(str(self.atr_high))
@@ -265,7 +265,7 @@ class TradingSession:
             'm15_levels': [level.to_dict() for level in self.m15_levels],
             'pre_market_price': str(self.pre_market_price),
             'atr_5min': str(self.atr_5min),
-            'atr_10min': str(self.atr_10min),
+            'atr_2hour': str(self.atr_2hour),  # CHANGED from atr_10min
             'atr_15min': str(self.atr_15min),
             'daily_atr': str(self.daily_atr),
             'atr_high': str(self.atr_high),
@@ -303,7 +303,7 @@ class TradingSession:
         # Set metrics
         session.pre_market_price = Decimal(data.get('pre_market_price', '0'))
         session.atr_5min = Decimal(data.get('atr_5min', '0'))
-        session.atr_10min = Decimal(data.get('atr_10min', '0'))
+        session.atr_2hour = Decimal(data.get('atr_2hour', '0'))  # CHANGED from atr_10min
         session.atr_15min = Decimal(data.get('atr_15min', '0'))
         session.daily_atr = Decimal(data.get('daily_atr', '0'))
         session.atr_high = Decimal(data.get('atr_high', '0'))

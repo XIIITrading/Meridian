@@ -64,7 +64,7 @@ class SupabaseClient:
                 'historical_time': session.historical_time.isoformat() if session.historical_time else None,
                 'pre_market_price': float(session.pre_market_price) if session.pre_market_price else None,
                 'atr_5min': float(session.atr_5min) if session.atr_5min else None,
-                'atr_10min': float(session.atr_10min) if session.atr_10min else None,
+                'atr_2hour': float(session.atr_2hour) if session.atr_2hour else None,  # CHANGED from atr_10min
                 'atr_15min': float(session.atr_15min) if session.atr_15min else None,
                 'daily_atr': float(session.daily_atr) if session.daily_atr else None,
                 'atr_high': float(session.atr_high) if session.atr_high else None,
@@ -178,7 +178,7 @@ class SupabaseClient:
                 'historical_time': session.historical_time.isoformat() if session.historical_time else None,
                 'pre_market_price': float(session.pre_market_price) if session.pre_market_price else None,
                 'atr_5min': float(session.atr_5min) if session.atr_5min else None,
-                'atr_10min': float(session.atr_10min) if session.atr_10min else None,
+                'atr_2hour': float(session.atr_2hour) if session.atr_2hour else None,  # CHANGED from atr_10min
                 'atr_15min': float(session.atr_15min) if session.atr_15min else None,
                 'daily_atr': float(session.daily_atr) if session.daily_atr else None,
                 'atr_high': float(session.atr_high) if session.atr_high else None,
@@ -570,8 +570,8 @@ class SupabaseClient:
             session.pre_market_price = Decimal(str(data['pre_market_price']))
         if data.get('atr_5min'):
             session.atr_5min = Decimal(str(data['atr_5min']))
-        if data.get('atr_10min'):
-            session.atr_10min = Decimal(str(data['atr_10min']))
+        if data.get('atr_2hour'):  # CHANGED from atr_10min
+            session.atr_2hour = Decimal(str(data['atr_2hour']))  # CHANGED from atr_10min
         if data.get('atr_15min'):
             session.atr_15min = Decimal(str(data['atr_15min']))
         if data.get('daily_atr'):

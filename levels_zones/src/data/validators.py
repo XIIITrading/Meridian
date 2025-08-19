@@ -383,9 +383,10 @@ class TradingSessionValidator:
             # Pre-market price - only validate if set
             if session.pre_market_price > 0:
                 # ATR values - just check they're not negative
+                # CHANGED: Updated to use atr_2hour instead of atr_10min
                 atr_fields = [
                     ('5-minute ATR', session.atr_5min),
-                    ('10-minute ATR', session.atr_10min),
+                    ('2-hour ATR', session.atr_2hour),  # CHANGED from atr_10min
                     ('15-minute ATR', session.atr_15min),
                     ('Daily ATR', session.daily_atr)
                 ]
@@ -477,7 +478,7 @@ class ATRValidator:
     """Validator for ATR calculations"""
     
     @staticmethod
-    def validate_atr_values(atr_5min: Decimal, atr_10min: Decimal, 
+    def validate_atr_values(atr_5min: Decimal, atr_2hour: Decimal,  # CHANGED parameter name
                            atr_15min: Decimal, daily_atr: Decimal) -> List[str]:
         """
         Validate ATR values for consistency.
@@ -485,7 +486,7 @@ class ATRValidator:
         
         Args:
             atr_5min: 5-minute ATR
-            atr_10min: 10-minute ATR
+            atr_2hour: 2-hour ATR  # CHANGED from atr_10min
             atr_15min: 15-minute ATR
             daily_atr: Daily ATR
             
@@ -495,11 +496,12 @@ class ATRValidator:
         warnings = []
         
         # RELAXED: Use larger multipliers for unusual comparisons
-        if atr_5min > atr_10min * Decimal("2.0"):  # Increased from 1.5
-            warnings.append("5-min ATR unusually high compared to 10-min ATR")
+        # CHANGED: Updated comparisons to use atr_2hour
+        if atr_5min > atr_2hour * Decimal("3.0"):  # Increased multiplier for 2-hour comparison
+            warnings.append("5-min ATR unusually high compared to 2-hour ATR")
         
-        if atr_10min > atr_15min * Decimal("2.0"):  # Increased from 1.5
-            warnings.append("10-min ATR unusually high compared to 15-min ATR")
+        if atr_2hour > atr_15min * Decimal("0.5"):  # 2-hour should typically be larger than 15-min
+            warnings.append("2-hour ATR unusually low compared to 15-min ATR")
         
         # Daily ATR should typically be larger than intraday ATRs
         if daily_atr < atr_15min * Decimal("0.5"):  # More relaxed

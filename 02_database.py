@@ -1,135 +1,62 @@
-# Create run_database.py in root directory
-"""
-NocoDB Database Manager for XIII Trading Systems
-Starts, stops, and manages the NocoDB Docker container
-"""
+# 02_database.py
 
-import subprocess
-import time
 import webbrowser
-import sys
-import os
-from pathlib import Path
+import time
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.options import Options
+from webdriver_manager.chrome import ChromeDriverManager
 
-class NocoDB:
-    def __init__(self):
-        self.root_dir = Path(__file__).parent
-        self.nocodb_dir = self.root_dir / "nocodb"
-        self.compose_file = "docker-compose-sqlite.yml"
-        self.url = "http://localhost:8080"
+def run():
+    """
+    Opens Rowzero database in Chrome browser.
+    Uses Selenium for better control and reliability.
+    """
+    url = "https://www.rowzero.io"
+    
+    # Method 1: Simple approach with webbrowser (uncomment to use)
+    # webbrowser.open(url)
+    
+    # Method 2: Selenium approach (recommended for automation)
+    try:
+        # Configure Chrome options
+        chrome_options = Options()
+        chrome_options.add_argument("--start-maximized")
         
-    def start(self):
-        """Start NocoDB container"""
-        print("🚀 Starting NocoDB Database...")
+        # Optional: Run in headless mode (uncomment if you don't need to see the browser)
+        # chrome_options.add_argument("--headless")
         
-        # Change to nocodb directory
-        os.chdir(self.nocodb_dir)
-        
-        # Start Docker container
-        result = subprocess.run(
-            ["docker-compose", "-f", self.compose_file, "up", "-d"],
-            capture_output=True,
-            text=True
+        # Create driver
+        driver = webdriver.Chrome(
+            service=Service(ChromeDriverManager().install()),
+            options=chrome_options
         )
         
-        if result.returncode == 0:
-            print("✅ NocoDB container started successfully")
-            print(f"⏳ Waiting for NocoDB to initialize...")
-            time.sleep(5)
-            
-            # Check if container is running
-            check = subprocess.run(
-                ["docker", "ps", "--filter", "name=nocodb_trading", "--format", "{{.Status}}"],
-                capture_output=True,
-                text=True
-            )
-            
-            if "Up" in check.stdout:
-                print(f"✅ NocoDB is running at {self.url}")
-                print("📊 Opening browser...")
-                webbrowser.open(self.url)
-                return True
-            else:
-                print("❌ Container failed to start properly")
-                return False
-        else:
-            print(f"❌ Error starting container: {result.stderr}")
-            return False
-    
-    def stop(self):
-        """Stop NocoDB container"""
-        print("🛑 Stopping NocoDB...")
-        os.chdir(self.nocodb_dir)
+        # Navigate to Rowzero
+        print(f"Opening Rowzero database...")
+        driver.get(url)
         
-        result = subprocess.run(
-            ["docker-compose", "-f", self.compose_file, "down"],
-            capture_output=True,
-            text=True
-        )
+        # Keep browser open (remove/modify based on your needs)
+        print("Browser opened successfully. Press Enter to close...")
+        input()
+        driver.quit()
         
-        if result.returncode == 0:
-            print("✅ NocoDB stopped successfully")
-        else:
-            print(f"❌ Error stopping container: {result.stderr}")
-    
-    def status(self):
-        """Check NocoDB status"""
-        result = subprocess.run(
-            ["docker", "ps", "--filter", "name=nocodb_trading", "--format", "table {{.Names}}\t{{.Status}}\t{{.Ports}}"],
-            capture_output=True,
-            text=True
-        )
-        
-        if "nocodb_trading" in result.stdout:
-            print("✅ NocoDB Status:")
-            print(result.stdout)
-        else:
-            print("❌ NocoDB is not running")
-    
-    def logs(self, lines=50):
-        """Show NocoDB logs"""
-        print(f"📋 Showing last {lines} lines of logs:")
-        subprocess.run(["docker", "logs", "nocodb_trading", "--tail", str(lines)])
-    
-    def restart(self):
-        """Restart NocoDB"""
-        print("🔄 Restarting NocoDB...")
-        self.stop()
-        time.sleep(2)
-        self.start()
+    except Exception as e:
+        print(f"Error opening browser: {e}")
+        # Fallback to simple webbrowser method
+        print("Attempting fallback method...")
+        webbrowser.open(url)
 
-def main():
-    """Main CLI interface"""
-    db = NocoDB()
-    
-    # Parse command line arguments
-    if len(sys.argv) < 2:
-        command = "start"  # Default action
-    else:
-        command = sys.argv[1].lower()
-    
-    commands = {
-        "start": db.start,
-        "stop": db.stop,
-        "restart": db.restart,
-        "status": db.status,
-        "logs": db.logs,
-    }
-    
-    if command in commands:
-        commands[command]()
-    else:
-        print("📊 NocoDB Database Manager")
-        print("========================")
-        print("\nUsage: python run_database.py [command]")
-        print("\nCommands:")
-        print("  start    - Start NocoDB (default)")
-        print("  stop     - Stop NocoDB")
-        print("  restart  - Restart NocoDB")
-        print("  status   - Check if NocoDB is running")
-        print("  logs     - Show container logs")
-        print("\nExample:")
-        print("  python run_database.py start")
+def run_simple():
+    """
+    Simple alternative using just webbrowser module.
+    Less control but no additional dependencies needed.
+    """
+    url = "https://www.rowzero.io"
+    print(f"Opening Rowzero database in default browser...")
+    webbrowser.open(url)
+    print("Browser opened successfully.")
 
 if __name__ == "__main__":
-    main()
+    # Run the main function when script is executed directly
+    run()

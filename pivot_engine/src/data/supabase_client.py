@@ -1,6 +1,7 @@
 """
 Supabase client wrapper for Meridian Trading System
 Handles all database operations and data persistence
+UPDATED: Pure Pivot Confluence System - M15 zones removed
 """
 
 import os
@@ -9,12 +10,13 @@ from datetime import datetime, date, time
 from decimal import Decimal
 from uuid import UUID
 import logging
+import json
 
 from supabase import create_client, Client
 from postgrest.exceptions import APIError
 
 from data.models import (
-    TradingSession, PriceLevel, WeeklyData, DailyData,
+    TradingSession, WeeklyData, DailyData, PivotConfluenceData,
     TrendDirection
 )
 
@@ -26,8 +28,8 @@ logger = logging.getLogger(__name__)
 
 class SupabaseClient:
     """
-    Wrapper class for all Supabase database operations.
-    Provides methods for CRUD operations on trading sessions and related data.
+    Wrapper class for all Supabase database operations - Pure Pivot Confluence System.
+    Provides methods for CRUD operations on trading sessions and pivot confluence data.
     """
     
     def __init__(self, url: str, key: str):
@@ -40,13 +42,13 @@ class SupabaseClient:
         """
         # Create the Supabase client instance
         self.client: Client = create_client(url, key)
-        logger.info("Supabase client initialized")
+        logger.info("Supabase client initialized (Pivot Confluence System)")
     
     # ==================== Trading Session Operations ====================
     
     def create_session(self, session: TradingSession) -> Tuple[bool, Optional[str]]:
         """
-        Create a new trading session in the database.
+        Create a new pivot trading session in the database.
         
         Args:
             session: TradingSession object to save
@@ -56,7 +58,6 @@ class SupabaseClient:
         """
         try:
             # Convert the session object to a dictionary for database insertion
-            # Note: weekly_data and daily_data are stored in separate tables
             session_data = {
                 'ticker': session.ticker,
                 'ticker_id': session.ticker_id,
@@ -66,7 +67,7 @@ class SupabaseClient:
                 'historical_time': session.historical_time.isoformat() if session.historical_time else None,
                 'pre_market_price': float(session.pre_market_price) if session.pre_market_price else None,
                 'atr_5min': float(session.atr_5min) if session.atr_5min else None,
-                'atr_2hour': float(session.atr_2hour) if session.atr_2hour else None,  # CHANGED from atr_10min
+                'atr_2hour': float(session.atr_2hour) if session.atr_2hour else None,
                 'atr_15min': float(session.atr_15min) if session.atr_15min else None,
                 'daily_atr': float(session.daily_atr) if session.daily_atr else None,
                 'atr_high': float(session.atr_high) if session.atr_high else None,
@@ -78,11 +79,7 @@ class SupabaseClient:
             
             if result.data and len(result.data) > 0:
                 session_id = result.data[0]['id']
-                logger.info(f"Created session {session.ticker_id} with ID: {session_id}")
-                
-                # Save price levels if any exist
-                if session.m15_levels:
-                    self._save_price_levels(session_id, session.m15_levels)
+                logger.info(f"Created pivot session {session.ticker_id} with ID: {session_id}")
                 
                 # Save weekly analysis to separate table
                 if session.weekly_data:
@@ -92,24 +89,27 @@ class SupabaseClient:
                 if session.daily_data:
                     self.save_daily_analysis(session_id, session)
                 
-                # Save to denormalized levels_zones table
-                confluence_text = getattr(session, 'confluence_results', None)
-                self.save_to_levels_zones(session, confluence_text)
+                # Save to denormalized pivots_zones table
+                pivot_confluence_results = getattr(session, 'pivot_confluence_results', None)
+                pivot_confluence_text = getattr(session, 'pivot_confluence_text', None)
+                pivot_confluence_settings = getattr(session, 'pivot_confluence_settings', None)
+                
+                self.save_to_pivots_zones(session, pivot_confluence_results, pivot_confluence_text, pivot_confluence_settings)
                 
                 return True, session_id
             
             return False, None
             
         except APIError as e:
-            logger.error(f"API error creating session: {e}")
+            logger.error(f"API error creating pivot session: {e}")
             return False, None
         except Exception as e:
-            logger.error(f"Unexpected error creating session: {e}")
+            logger.error(f"Unexpected error creating pivot session: {e}")
             return False, None
     
     def get_session(self, ticker_id: str) -> Optional[TradingSession]:
         """
-        Retrieve a trading session by ticker_id.
+        Retrieve a pivot trading session by ticker_id.
         
         Args:
             ticker_id: Unique identifier (e.g., "AAPL.120124")
@@ -131,10 +131,6 @@ class SupabaseClient:
                 # Convert database record to TradingSession object
                 session = self._session_from_db(session_data)
                 
-                # Load associated price levels
-                price_levels = self._get_price_levels(session_id)
-                session.m15_levels = price_levels
-                
                 # Load weekly analysis from separate table
                 weekly_data = self._get_weekly_analysis(session_id)
                 if weekly_data:
@@ -145,18 +141,23 @@ class SupabaseClient:
                 if daily_data:
                     session.daily_data = daily_data
                 
+                # Load pivot confluence data from pivots_zones table
+                pivot_data = self._get_pivot_confluence_data(ticker_id)
+                if pivot_data:
+                    session.pivot_confluence_data = pivot_data
+                
                 return session
             
-            logger.warning(f"Session not found: {ticker_id}")
+            logger.warning(f"Pivot session not found: {ticker_id}")
             return None
             
         except Exception as e:
-            logger.error(f"Error retrieving session {ticker_id}: {e}")
+            logger.error(f"Error retrieving pivot session {ticker_id}: {e}")
             return None
     
     def update_session(self, session: TradingSession) -> bool:
         """
-        Update an existing trading session.
+        Update an existing pivot trading session.
         
         Args:
             session: TradingSession object with updated data
@@ -172,19 +173,19 @@ class SupabaseClient:
                 .execute()
             
             if not existing.data:
-                logger.error(f"Session not found for update: {session.ticker_id}")
+                logger.error(f"Pivot session not found for update: {session.ticker_id}")
                 return False
             
             session_id = existing.data[0]['id']
             
-            # Prepare update data - NO weekly_data or daily_data here
+            # Prepare update data
             update_data = {
                 'is_live': session.is_live,
                 'historical_date': session.historical_date.isoformat() if session.historical_date else None,
                 'historical_time': session.historical_time.isoformat() if session.historical_time else None,
                 'pre_market_price': float(session.pre_market_price) if session.pre_market_price else None,
                 'atr_5min': float(session.atr_5min) if session.atr_5min else None,
-                'atr_2hour': float(session.atr_2hour) if session.atr_2hour else None,  # CHANGED from atr_10min
+                'atr_2hour': float(session.atr_2hour) if session.atr_2hour else None,
                 'atr_15min': float(session.atr_15min) if session.atr_15min else None,
                 'daily_atr': float(session.daily_atr) if session.daily_atr else None,
                 'atr_high': float(session.atr_high) if session.atr_high else None,
@@ -197,11 +198,6 @@ class SupabaseClient:
                 .eq('id', session_id)\
                 .execute()
             
-            # Update price levels (delete and re-insert for simplicity)
-            if session.m15_levels:
-                self._delete_price_levels(session_id)
-                self._save_price_levels(session_id, session.m15_levels)
-            
             # Update weekly analysis in separate table
             if session.weekly_data:
                 self.save_weekly_analysis(session_id, session)
@@ -210,53 +206,43 @@ class SupabaseClient:
             if session.daily_data:
                 self.save_daily_analysis(session_id, session)
             
-            # Save to denormalized levels_zones table
-            confluence_text = getattr(session, 'confluence_results', None)
-            self.save_to_levels_zones(session, confluence_text)
+            # Save to denormalized pivots_zones table
+            pivot_confluence_results = getattr(session, 'pivot_confluence_results', None)
+            pivot_confluence_text = getattr(session, 'pivot_confluence_text', None)
+            pivot_confluence_settings = getattr(session, 'pivot_confluence_settings', None)
             
-            logger.info(f"Updated session: {session.ticker_id}")
+            self.save_to_pivots_zones(session, pivot_confluence_results, pivot_confluence_text, pivot_confluence_settings)
+            
+            logger.info(f"Updated pivot session: {session.ticker_id}")
             return True
             
         except Exception as e:
-            logger.error(f"Error updating session {session.ticker_id}: {e}")
+            logger.error(f"Error updating pivot session {session.ticker_id}: {e}")
             return False
     
-    def save_to_levels_zones(self, session: TradingSession, confluence_text: Optional[str] = None) -> bool:
+    def save_to_pivots_zones(self, session: TradingSession, 
+                            pivot_confluence_results: Optional[Any] = None,
+                            pivot_confluence_text: Optional[str] = None,
+                            pivot_confluence_settings: Optional[str] = None) -> bool:
         """
-        Save session data to denormalized levels_zones table.
+        Save session data to denormalized pivots_zones table.
         Maps all available fields from session object to single row format.
-        Includes confluence ranking text and individual zone scores if analysis was run.
+        Includes pivot confluence analysis results, settings, and formatted text.
         
         Args:
             session: TradingSession object with all data
-            confluence_text: Optional confluence ranking text from UI
+            pivot_confluence_results: Raw pivot confluence analysis object
+            pivot_confluence_text: Formatted display text from analysis
+            pivot_confluence_settings: User confluence checkbox settings (JSON)
             
         Returns:
             bool: True if successful, False otherwise
         """
         try:
-            logger.info(f"Saving to levels_zones table: {session.ticker_id}")
+            logger.info(f"Saving to pivots_zones table: {session.ticker_id}")
             
-            # Get confluence text and results from session
-            # CRITICAL: Ensure confluence_text is actually text, not the object
-            if not confluence_text:
-                confluence_text = getattr(session, 'confluence_text', None)
-            
-            # Check if confluence_text is accidentally the ConfluenceResult object
-            if confluence_text and hasattr(confluence_text, '__class__') and 'ConfluenceResult' in str(confluence_text.__class__):
-                logger.warning("confluence_text is a ConfluenceResult object, not text! Fixing...")
-                confluence_results = confluence_text  # The object was in the wrong variable
-                confluence_text = None  # Clear the text field
-            else:
-                # Get the actual confluence results object
-                confluence_results = getattr(session, 'confluence_results', None)
-            
-            # Debug log the types
-            logger.debug(f"confluence_text type: {type(confluence_text)}")
-            logger.debug(f"confluence_results type: {type(confluence_results)}")
-            
-            # Prepare the data record
-            levels_zones_data = {
+            # Prepare the data record for pivots_zones table
+            pivots_zones_data = {
                 # Primary identification
                 'ticker_id': session.ticker_id,
                 'ticker': session.ticker,
@@ -266,23 +252,26 @@ class SupabaseClient:
                     session.historical_date, session.historical_time
                 ).isoformat() if session.historical_date and session.historical_time else None,
                 'analysis_datetime': datetime.now().isoformat(),
-                'analysis_status': 'completed' if confluence_text or confluence_results else 'pending',
+                'analysis_status': 'completed' if pivot_confluence_results or pivot_confluence_text else 'pending',
                 
-                # Weekly Analysis (9 fields)
+                # Weekly Analysis (5 fields + price levels)
                 'weekly_trend_direction': session.weekly_data.trend_direction.value if session.weekly_data else None,
                 'weekly_internal_trend': session.weekly_data.internal_trend.value if session.weekly_data else None,
                 'weekly_position_structure': float(session.weekly_data.position_structure) if session.weekly_data else None,
                 'weekly_eow_bias': session.weekly_data.eow_bias.value if session.weekly_data else None,
                 'weekly_notes': session.weekly_data.notes if session.weekly_data else None,
                 
-                # Daily Analysis (12 fields)
+                # Daily Analysis (5 fields + price levels)
                 'daily_trend_direction': session.daily_data.trend_direction.value if session.daily_data else None,
                 'daily_internal_trend': session.daily_data.internal_trend.value if session.daily_data else None,
                 'daily_position_structure': float(session.daily_data.position_structure) if session.daily_data else None,
                 'daily_eod_bias': session.daily_data.eod_bias.value if session.daily_data else None,
                 'daily_notes': session.daily_data.notes if session.daily_data else None,
                 
-                # Metrics (8 fields)
+                # Pivot Confluence Settings (JSON)
+                'pivot_confluence_settings': pivot_confluence_settings,
+                
+                # Price and ATR data (8 fields)
                 'pre_market_price': float(session.pre_market_price) if session.pre_market_price else None,
                 'current_price': float(session.pre_market_price) if session.pre_market_price else None,  # Using pre_market as current
                 'atr_5min': float(session.atr_5min) if session.atr_5min else None,
@@ -292,8 +281,8 @@ class SupabaseClient:
                 'atr_high': float(session.atr_high) if session.atr_high else None,
                 'atr_low': float(session.atr_low) if session.atr_low else None,
                 
-                # Confluence Analysis Results (1 field when analysis is run)
-                'zones_ranked_text': confluence_text if isinstance(confluence_text, str) else None,
+                # Analysis results text
+                'pivot_confluence_text': pivot_confluence_text if isinstance(pivot_confluence_text, str) else None,
                 
                 # Timestamps
                 'created_at': datetime.now().isoformat(),
@@ -304,60 +293,53 @@ class SupabaseClient:
             if session.weekly_data and hasattr(session.weekly_data, 'price_levels'):
                 for i, level in enumerate(session.weekly_data.price_levels[:4], 1):
                     if level and float(level) > 0:
-                        levels_zones_data[f'weekly_wl{i}'] = float(level)
+                        pivots_zones_data[f'weekly_wl{i}'] = float(level)
             
             # Add daily price levels (dl1-dl6)
             if session.daily_data and session.daily_data.price_levels:
                 for i, level in enumerate(session.daily_data.price_levels[:6], 1):
                     if level and float(level) > 0:
-                        levels_zones_data[f'daily_dl{i}'] = float(level)
+                        pivots_zones_data[f'daily_dl{i}'] = float(level)
             
-            # Add M15 zones with confluence scores (30 fields + confluence data)
-            for i, level in enumerate(session.m15_levels[:6]):
-                zone_num = i + 1
-                levels_zones_data[f'm15_zone{zone_num}_level'] = float(level.line_price) if level.line_price else None
-                levels_zones_data[f'm15_zone{zone_num}_high'] = float(level.candle_high) if level.candle_high else None
-                levels_zones_data[f'm15_zone{zone_num}_low'] = float(level.candle_low) if level.candle_low else None
-                levels_zones_data[f'm15_zone{zone_num}_date'] = level.candle_datetime.date().isoformat()
-                levels_zones_data[f'm15_zone{zone_num}_time'] = level.candle_datetime.time().isoformat()
+            # Add Daily Camarilla pivot data if available
+            if pivot_confluence_results and hasattr(pivot_confluence_results, 'pivot_zones'):
+                logger.debug(f"Processing {len(pivot_confluence_results.pivot_zones)} pivot zones")
                 
-                # Initialize confluence fields as None
-                levels_zones_data[f'm15_zone{zone_num}_confluence_score'] = None
-                levels_zones_data[f'm15_zone{zone_num}_confluence_level'] = None
-                levels_zones_data[f'm15_zone{zone_num}_confluence_count'] = None
-                
-                # Add confluence scores if available
-                if confluence_results and hasattr(confluence_results, 'zone_scores'):
-                    # It's the actual ConfluenceResult object
-                    zone_scores = confluence_results.zone_scores
+                for zone in pivot_confluence_results.pivot_zones:
+                    level_name = zone.level_name.lower()  # r6, r4, r3, s3, s4, s6
                     
-                    # Find the matching zone score
-                    for zone_score in zone_scores:
-                        if zone_score.zone_number == zone_num:
-                            # Extract primitive values from the ZoneScore object
-                            levels_zones_data[f'm15_zone{zone_num}_confluence_score'] = float(zone_score.score)
-                            
-                            # Handle confluence_level which might be an enum
-                            if hasattr(zone_score.confluence_level, 'value'):
-                                confluence_level_str = zone_score.confluence_level.value
-                            else:
-                                confluence_level_str = str(zone_score.confluence_level)
-                            
-                            levels_zones_data[f'm15_zone{zone_num}_confluence_level'] = confluence_level_str
-                            levels_zones_data[f'm15_zone{zone_num}_confluence_count'] = int(zone_score.confluence_count)
-                            
-                            logger.debug(f"Zone {zone_num}: score={zone_score.score:.2f}, level={confluence_level_str}, count={zone_score.confluence_count}")
-                            break
+                    # Pivot prices
+                    pivots_zones_data[f'daily_cam_{level_name}_price'] = float(zone.pivot_price) if zone.pivot_price else None
+                    
+                    # Zone ranges (pivot ± 5min ATR)
+                    pivots_zones_data[f'daily_cam_{level_name}_zone_low'] = float(zone.zone_low) if zone.zone_low else None
+                    pivots_zones_data[f'daily_cam_{level_name}_zone_high'] = float(zone.zone_high) if zone.zone_high else None
+                    
+                    # Confluence scores and levels
+                    pivots_zones_data[f'daily_cam_{level_name}_confluence_score'] = float(zone.confluence_score) if zone.confluence_score else None
+                    
+                    # Handle confluence_level (might be enum)
+                    if hasattr(zone.level_designation, 'value'):
+                        confluence_level_str = f"L{zone.level_designation.value}"
+                    else:
+                        confluence_level_str = f"L{zone.level_designation}"
+                    pivots_zones_data[f'daily_cam_{level_name}_confluence_level'] = confluence_level_str
+                    
+                    # Confluence count (number of sources that contributed)
+                    pivots_zones_data[f'daily_cam_{level_name}_confluence_count'] = int(zone.confluence_count) if hasattr(zone, 'confluence_count') else 0
+                    
+                    logger.debug(f"Pivot {zone.level_name}: price=${zone.pivot_price:.2f}, "
+                               f"zone=${zone.zone_low:.2f}-${zone.zone_high:.2f}, "
+                               f"score={zone.confluence_score:.1f}, level={confluence_level_str}")
             
             # Debug: Verify all values are JSON serializable
-            import json
             try:
-                json.dumps(levels_zones_data)
-                logger.debug("levels_zones_data is JSON serializable")
+                json.dumps(pivots_zones_data)
+                logger.debug("pivots_zones_data is JSON serializable")
             except TypeError as e:
-                logger.error(f"levels_zones_data contains non-serializable data: {e}")
+                logger.error(f"pivots_zones_data contains non-serializable data: {e}")
                 # Log which fields are problematic
-                for key, value in levels_zones_data.items():
+                for key, value in pivots_zones_data.items():
                     try:
                         json.dumps({key: value})
                     except:
@@ -365,27 +347,92 @@ class SupabaseClient:
                 return False
             
             # Use INSERT ... ON CONFLICT UPDATE for idempotency
-            result = self.client.table('levels_zones')\
-                .upsert(levels_zones_data, on_conflict='ticker_id')\
+            result = self.client.table('pivots_zones')\
+                .upsert(pivots_zones_data, on_conflict='ticker_id')\
                 .execute()
             
             if result.data:
-                logger.info(f"Successfully saved to levels_zones: {session.ticker_id}")
+                logger.info(f"Successfully saved to pivots_zones: {session.ticker_id}")
                 return True
             else:
-                logger.warning(f"No data returned when saving to levels_zones: {session.ticker_id}")
+                logger.warning(f"No data returned when saving to pivots_zones: {session.ticker_id}")
                 return False
                 
         except Exception as e:
-            logger.error(f"Error saving to levels_zones table: {e}")
+            logger.error(f"Error saving to pivots_zones table: {e}")
             logger.error(f"Traceback: {traceback.format_exc()}")
             return False
+    
+    def _get_pivot_confluence_data(self, ticker_id: str) -> Optional[PivotConfluenceData]:
+        """
+        Retrieve pivot confluence data from pivots_zones table.
+        
+        Args:
+            ticker_id: Unique identifier (e.g., "AAPL.120124")
+            
+        Returns:
+            PivotConfluenceData object or None if not found
+        """
+        try:
+            result = self.client.table('pivots_zones')\
+                .select("*")\
+                .eq('ticker_id', ticker_id)\
+                .execute()
+            
+            if result.data and len(result.data) > 0:
+                data = result.data[0]
+                
+                # Create PivotConfluenceData object
+                pivot_data = PivotConfluenceData()
+                
+                # Map Daily Camarilla pivot prices
+                levels = ['r6', 'r4', 'r3', 's3', 's4', 's6']
+                for level in levels:
+                    # Pivot prices
+                    price_field = f'daily_cam_{level}_price'
+                    if data.get(price_field):
+                        setattr(pivot_data, price_field, Decimal(str(data[price_field])))
+                    
+                    # Zone ranges
+                    low_field = f'daily_cam_{level}_zone_low'
+                    high_field = f'daily_cam_{level}_zone_high'
+                    if data.get(low_field):
+                        setattr(pivot_data, low_field, Decimal(str(data[low_field])))
+                    if data.get(high_field):
+                        setattr(pivot_data, high_field, Decimal(str(data[high_field])))
+                    
+                    # Confluence scores and levels
+                    score_field = f'daily_cam_{level}_confluence_score'
+                    level_field = f'daily_cam_{level}_confluence_level'
+                    count_field = f'daily_cam_{level}_confluence_count'
+                    
+                    if data.get(score_field):
+                        setattr(pivot_data, score_field, Decimal(str(data[score_field])))
+                    if data.get(level_field):
+                        setattr(pivot_data, level_field, data[level_field])
+                    if data.get(count_field):
+                        setattr(pivot_data, count_field, int(data[count_field]))
+                
+                # Settings and text
+                if data.get('pivot_confluence_settings'):
+                    pivot_data.pivot_confluence_settings = data['pivot_confluence_settings']
+                if data.get('pivot_confluence_text'):
+                    pivot_data.pivot_confluence_text = data['pivot_confluence_text']
+                
+                logger.debug(f"Loaded pivot confluence data for {ticker_id}")
+                return pivot_data
+                
+            return None
+            
+        except Exception as e:
+            logger.error(f"Error retrieving pivot confluence data: {e}")
+            return None
     
     def list_sessions(self, ticker: Optional[str] = None, 
                      start_date: Optional[date] = None,
                      end_date: Optional[date] = None) -> List[TradingSession]:
         """
-        List trading sessions with optional filters.
+        List pivot trading sessions with optional filters.
         
         Args:
             ticker: Filter by ticker symbol
@@ -415,11 +462,11 @@ class SupabaseClient:
                 session = self._session_from_db(session_data)
                 sessions.append(session)
             
-            logger.info(f"Retrieved {len(sessions)} sessions")
+            logger.info(f"Retrieved {len(sessions)} pivot sessions")
             return sessions
             
         except Exception as e:
-            logger.error(f"Error listing sessions: {e}")
+            logger.error(f"Error listing pivot sessions: {e}")
             return []
     
     # ==================== Weekly Analysis Operations ====================
@@ -647,11 +694,11 @@ class SupabaseClient:
     
     def create_analysis_run(self, session_id: str, run_type: str = 'manual') -> Optional[str]:
         """
-        Create a new analysis run record for tracking calculations.
+        Create a new analysis run record for tracking pivot calculations.
         
         Args:
             session_id: ID of the trading session
-            run_type: Type of run ('manual', 'scheduled', 'recalculation')
+            run_type: Type of run ('manual', 'scheduled', 'pivot_recalculation')
             
         Returns:
             Analysis run ID or None if failed
@@ -663,7 +710,8 @@ class SupabaseClient:
                 'status': 'running',
                 'metadata': {
                     'started_by': 'user',
-                    'version': '1.0'
+                    'version': '2.0',
+                    'analysis_type': 'pivot_confluence'
                 }
             }
             
@@ -671,18 +719,18 @@ class SupabaseClient:
             
             if result.data:
                 run_id = result.data[0]['id']
-                logger.info(f"Created analysis run: {run_id}")
+                logger.info(f"Created pivot analysis run: {run_id}")
                 return run_id
             
             return None
             
         except Exception as e:
-            logger.error(f"Error creating analysis run: {e}")
+            logger.error(f"Error creating pivot analysis run: {e}")
             return None
     
     def complete_analysis_run(self, run_id: str, status: str = 'completed') -> bool:
         """
-        Mark an analysis run as completed.
+        Mark a pivot analysis run as completed.
         
         Args:
             run_id: Analysis run ID
@@ -702,11 +750,11 @@ class SupabaseClient:
                 .eq('id', run_id)\
                 .execute()
             
-            logger.info(f"Completed analysis run {run_id} with status: {status}")
+            logger.info(f"Completed pivot analysis run {run_id} with status: {status}")
             return True
             
         except Exception as e:
-            logger.error(f"Error completing analysis run: {e}")
+            logger.error(f"Error completing pivot analysis run: {e}")
             return False
     
     # ==================== Private Helper Methods ====================
@@ -714,7 +762,7 @@ class SupabaseClient:
     def _session_from_db(self, data: Dict[str, Any]) -> TradingSession:
         """
         Convert database record to TradingSession object.
-        Note: weekly_data and daily_data are loaded separately from their own tables
+        Note: weekly_data, daily_data, and pivot_confluence_data are loaded separately
         
         Args:
             data: Database record dictionary
@@ -740,8 +788,8 @@ class SupabaseClient:
             session.pre_market_price = Decimal(str(data['pre_market_price']))
         if data.get('atr_5min'):
             session.atr_5min = Decimal(str(data['atr_5min']))
-        if data.get('atr_2hour'):  # CHANGED from atr_10min
-            session.atr_2hour = Decimal(str(data['atr_2hour']))  # CHANGED from atr_10min
+        if data.get('atr_2hour'):
+            session.atr_2hour = Decimal(str(data['atr_2hour']))
         if data.get('atr_15min'):
             session.atr_15min = Decimal(str(data['atr_15min']))
         if data.get('daily_atr'):
@@ -764,96 +812,6 @@ class SupabaseClient:
                 updated_str += '+00:00'
             session.updated_at = datetime.fromisoformat(updated_str)
         
-        # Note: weekly_data and daily_data are loaded separately via
-        # _get_weekly_analysis() and _get_daily_analysis()
+        # Note: weekly_data, daily_data, and pivot_confluence_data are loaded separately
         
         return session
-    
-    def _save_price_levels(self, session_id: str, levels: List[PriceLevel]) -> bool:
-        """
-        Save price levels for a session.
-        
-        Args:
-            session_id: Trading session ID
-            levels: List of PriceLevel objects
-            
-        Returns:
-            bool: Success status
-        """
-        try:
-            # Prepare level records
-            level_records = []
-            for level in levels:
-                record = {
-                    'session_id': session_id,
-                    'level_id': level.level_id,
-                    'line_price': float(level.line_price),
-                    'candle_datetime': level.candle_datetime.isoformat(),
-                    'candle_high': float(level.candle_high),
-                    'candle_low': float(level.candle_low)
-                }
-                level_records.append(record)
-            
-            # Insert all levels
-            if level_records:
-                self.client.table('price_levels').insert(level_records).execute()
-                logger.info(f"Saved {len(level_records)} price levels")
-            
-            return True
-            
-        except Exception as e:
-            logger.error(f"Error saving price levels: {e}")
-            return False
-    
-    def _get_price_levels(self, session_id: str) -> List[PriceLevel]:
-        """
-        Retrieve price levels for a session.
-        
-        Args:
-            session_id: Trading session ID
-            
-        Returns:
-            List of PriceLevel objects
-        """
-        try:
-            result = self.client.table('price_levels')\
-                .select("*")\
-                .eq('session_id', session_id)\
-                .execute()
-            
-            levels = []
-            for level_data in result.data:
-                level = PriceLevel(
-                    line_price=Decimal(str(level_data['line_price'])),
-                    candle_datetime=datetime.fromisoformat(level_data['candle_datetime']),
-                    candle_high=Decimal(str(level_data['candle_high'])),
-                    candle_low=Decimal(str(level_data['candle_low'])),
-                    level_id=level_data['level_id']
-                )
-                levels.append(level)
-            
-            return levels
-            
-        except Exception as e:
-            logger.error(f"Error retrieving price levels: {e}")
-            return []
-    
-    def _delete_price_levels(self, session_id: str) -> bool:
-        """
-        Delete all price levels for a session.
-        
-        Args:
-            session_id: Trading session ID
-            
-        Returns:
-            bool: Success status
-        """
-        try:
-            self.client.table('price_levels')\
-                .delete()\
-                .eq('session_id', session_id)\
-                .execute()
-            return True
-        except Exception as e:
-            logger.error(f"Error deleting price levels: {e}")
-            return False

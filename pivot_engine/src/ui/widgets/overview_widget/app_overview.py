@@ -1,6 +1,7 @@
 """
 Overview widget for Meridian Trading System
-Handles ticker entry, session management, metrics display, and M15 zones
+Handles ticker entry, session management, metrics display, and Camarilla Pivot Confluence
+UPDATED: Replaced M15 zones with Pivot Confluence system
 """
 
 from datetime import datetime, date, time
@@ -24,7 +25,7 @@ from .components import SectionHeader
 from .session_info import SessionInfoFrame
 from .analysis_frames import WeeklyAnalysisFrame, DailyAnalysisFrame
 from .metrics_frame import MetricsFrame
-from .zone_table import M15ZoneTable
+from .pivot_confluence_widget import PivotConfluenceWidget  # NEW IMPORT
 from .calculations import CalculationsDisplay
 
 logger = logging.getLogger(__name__)
@@ -33,6 +34,7 @@ logger = logging.getLogger(__name__)
 class OverviewWidget(QWidget):
     """
     Main overview widget containing all primary controls and displays
+    UPDATED: Uses Pivot Confluence instead of M15 zones
     """
     
     # Signals
@@ -46,8 +48,6 @@ class OverviewWidget(QWidget):
         self.setStyleSheet(DarkStyleSheets.WIDGET_CONTAINER)
         self._init_ui()
         self._connect_signals()
-        # Add this to store raw confluence results
-        self._confluence_results = None
     
     def _init_ui(self):
         """Initialize the UI following the wireframe layout"""
@@ -70,7 +70,7 @@ class OverviewWidget(QWidget):
         self.session_info.run_analysis_btn.clicked.connect(self._on_run_analysis)
         self.session_info.fetch_data_btn.clicked.connect(self._fetch_market_data)
         self.session_info.save_to_db_btn.clicked.connect(self._on_save_to_database)
-        self.session_info.clear_all_btn.clicked.connect(self._on_clear_all)  # NEW CONNECTION
+        self.session_info.clear_all_btn.clicked.connect(self._on_clear_all)
         container_layout.addWidget(self.session_info)
         
         # Metrics section
@@ -91,92 +91,16 @@ class OverviewWidget(QWidget):
         self.daily_frame = DailyAnalysisFrame()
         container_layout.addWidget(self.daily_frame)
         
-        # M15 Zone Data Entry with Query Data button
-        zone_header_layout = QHBoxLayout()
-        
-        zone_label = QLabel("M15 Zone Data Entry")
-        zone_label.setStyleSheet(f"""
-            QLabel {{
-                background-color: {DarkTheme.BG_DARK};
-                color: {DarkTheme.TEXT_PRIMARY};
-                padding: 8px;
-                font-weight: bold;
-                font-size: 14px;
-                border: 1px solid {DarkTheme.BORDER_NORMAL};
-                border-radius: 3px;
-            }}
-        """)
-        zone_header_layout.addWidget(zone_label)
-        
-        # Add Query Data button
-        self.query_data_btn = QPushButton("Query Data")
-        self.query_data_btn.setStyleSheet(f"""
-            QPushButton {{
-                background-color: {DarkTheme.INFO};
-                border: none;
-                border-radius: 3px;
-                color: white;
-                font-weight: bold;
-                padding: 6px 12px;
-                font-size: 11px;
-            }}
-            QPushButton:hover {{
-                background-color: #1976d2;
-            }}
-            QPushButton:pressed {{
-                background-color: #0d47a1;
-            }}
-            QPushButton:disabled {{
-                background-color: {DarkTheme.BG_LIGHT};
-                color: {DarkTheme.TEXT_DISABLED};
-            }}
-        """)
-        self.query_data_btn.setMaximumWidth(120)
-        self.query_data_btn.setToolTip("Query M15 candle data from Polygon (Ctrl+Q)")
-        self.query_data_btn.setShortcut("Ctrl+Q")
-        self.query_data_btn.clicked.connect(self._on_query_zone_data)
-        zone_header_layout.addWidget(self.query_data_btn)
-        
-        zone_header_layout.addStretch()
-        container_layout.addLayout(zone_header_layout)
-        
-        # Add the zone table
-        self.zone_table = M15ZoneTable()
-        container_layout.addWidget(self.zone_table)
+        # REPLACED: M15 Zone Data Entry with Daily Camarilla Pivot Confluence
+        self.pivot_confluence_widget = PivotConfluenceWidget()
+        self.pivot_confluence_widget.confluence_settings_changed.connect(self._on_confluence_settings_changed)
+        container_layout.addWidget(self.pivot_confluence_widget)
         
         # Calculations section
         self.calculations = CalculationsDisplay()
         container_layout.addWidget(self.calculations)
         
-        # M15 Zones Ranked section
-        zones_ranked_label = QLabel("M15 Zones Ranked")
-        zones_ranked_label.setStyleSheet(f"""
-            QLabel {{
-                background-color: {DarkTheme.BG_DARK};
-                color: {DarkTheme.TEXT_PRIMARY};
-                padding: 8px;
-                font-weight: bold;
-                font-size: 14px;
-                border: 1px solid {DarkTheme.BORDER_NORMAL};
-                border-radius: 3px;
-            }}
-        """)
-        zones_ranked_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        container_layout.addWidget(zones_ranked_label)
-
-        self.zones_ranked = QTextEdit()
-        # Apply larger font size to zones ranked text area
-        zones_ranked_style = DarkStyleSheets.TEXT_AREA + """
-            QTextEdit {
-                font-size: 14px;
-                line-height: 1.4;
-            }
-        """
-        self.zones_ranked.setStyleSheet(zones_ranked_style)
-        self.zones_ranked.setPlaceholderText("M15 Zones Confluence Ranking will appear here after analysis...")
-        self.zones_ranked.setMinimumHeight(200)
-        self.zones_ranked.setReadOnly(True)
-        container_layout.addWidget(self.zones_ranked)
+        # REMOVED: M15 Zones Ranked section (now integrated into pivot confluence widget)
         
         # Add stretch at bottom
         container_layout.addStretch()
@@ -235,6 +159,12 @@ class OverviewWidget(QWidget):
         if len(ticker.strip()) >= 1:
             self.data_changed.emit()
     
+    def _on_confluence_settings_changed(self):
+        """Handle confluence settings changes"""
+        self.data_changed.emit()
+        # Optionally trigger re-analysis if data exists
+        self.statusBar().showMessage("Confluence settings updated", 3000)
+    
     @pyqtSlot()
     def _fetch_market_data(self):
         """Fetch market data from Polygon"""
@@ -253,158 +183,6 @@ class OverviewWidget(QWidget):
             'ticker': ticker.upper(),
             'datetime': datetime_val
         })
-    
-    @pyqtSlot()
-    def _on_query_zone_data(self):
-        """Query and populate M15 zone candle data from Polygon"""
-        ticker = self.session_info.ticker_input.text().strip()
-        if not ticker:
-            QMessageBox.warning(self, "Missing Ticker", "Please enter a ticker symbol.")
-            return
-        
-        # Validate zone times first
-        time_errors = self.zone_table.validate_zone_times()
-        if time_errors:
-            QMessageBox.warning(
-                self, 
-                "Invalid Time Format", 
-                "Please correct the following time format errors:\n\n" + "\n".join(time_errors)
-            )
-            return
-        
-        # Check if we have any valid zones
-        valid_zone_count = self.zone_table.get_valid_zone_count()
-        if valid_zone_count == 0:
-            QMessageBox.warning(
-                self, 
-                "No Valid Zones", 
-                "Please enter date and time (in UTC) for at least one zone.\n\n"
-                "Time format: hh:mm:ss\n"
-                "Example: 14:30:00 for market open"
-            )
-            return
-        
-        # Import the calculator with proper path handling
-        import sys
-        from pathlib import Path
-        
-        # Navigate to project root
-        widget_dir = Path(__file__).parent
-        project_root = widget_dir.parent.parent.parent.parent
-        
-        # Add project root to path if not already there
-        if str(project_root) not in sys.path:
-            sys.path.insert(0, str(project_root))
-        
-        # Also add src path for the data imports inside m15_zone_calc
-        src_path = project_root / 'src'
-        if str(src_path) not in sys.path:
-            sys.path.insert(0, str(src_path))
-        
-        try:
-            # Now import should work
-            from calculations.candlestick.m15_zone_calc import M15ZoneCalculator
-        except ImportError as e:
-            logger.error(f"Failed to import M15ZoneCalculator: {e}")
-            QMessageBox.critical(
-                self, 
-                "Import Error", 
-                f"Failed to import M15 Zone Calculator:\n{str(e)}\n\n"
-                "Please ensure the calculations/candlestick/m15_zone_calc.py file exists."
-            )
-            return
-        
-        # Disable button and show progress
-        self.query_data_btn.setEnabled(False)
-        self.query_data_btn.setText("Querying...")
-        
-        # Show status
-        self.statusBar().showMessage(f"Querying M15 candle data for {ticker} ({valid_zone_count} zones)...")
-        
-        try:
-            # Get zone data from table
-            zones = self.zone_table.get_zone_data()
-            
-            # Create calculator and fetch data
-            calculator = M15ZoneCalculator()
-            
-            # Test connection first
-            connected, msg = calculator.test_connection()
-            if not connected:
-                raise Exception(f"Polygon connection failed: {msg}")
-            
-            # Fetch candle data for all zones
-            results = calculator.fetch_all_zone_candles(ticker.upper(), zones)
-            
-            # Track results
-            updated_count = 0
-            failed_zones = []
-            
-            # Update table with results
-            for zone_idx, candle_data in results:
-                if candle_data:
-                    # Update the table cells
-                    self.zone_table.item(zone_idx, 3).setText(f"{candle_data['mid']:.2f}")
-                    self.zone_table.item(zone_idx, 4).setText(f"{candle_data['high']:.2f}")
-                    self.zone_table.item(zone_idx, 5).setText(f"{candle_data['low']:.2f}")
-                    
-                    # Set text color to indicate successful fetch
-                    for col in [3, 4, 5]:
-                        self.zone_table.item(zone_idx, col).setForeground(QColor(DarkTheme.SUCCESS))
-                    
-                    updated_count += 1
-                else:
-                    # Check if this zone had valid date/time
-                    zone = zones[zone_idx]
-                    if zone.get('date') and zone.get('time') and \
-                       zone['date'] != 'yyyy-mm-dd' and \
-                       zone['time'] not in ['hh:mm:ss', 'hh:mm:ss UTC']:
-                        failed_zones.append(f"Zone {zone_idx + 1}: {zone['date']} {zone['time']}")
-            
-            # Show results
-            self.statusBar().showMessage(f"Query complete: {updated_count} zones updated", 5000)
-            
-            if updated_count > 0:
-                message = f"Successfully queried data for {updated_count} zone(s).\n\n"
-                message += "Data populated:\n"
-                message += "• Level = Midpoint of candle (High + Low) / 2\n"
-                message += "• Zone High = Candle High\n"
-                message += "• Zone Low = Candle Low"
-                
-                if failed_zones:
-                    message += f"\n\nNo data found for {len(failed_zones)} zone(s):\n"
-                    message += "\n".join(failed_zones[:5])
-                    if len(failed_zones) > 5:
-                        message += f"\n... and {len(failed_zones) - 5} more"
-                
-                QMessageBox.information(self, "Query Complete", message)
-                self.data_changed.emit()
-            else:
-                QMessageBox.warning(
-                    self, 
-                    "No Data Found", 
-                    "No candle data found for the specified zones.\n\n"
-                    "Please check:\n"
-                    "• Times are in UTC format\n"
-                    "• Times are within market hours (08:00-00:00 UTC)\n"
-                    "• Dates are valid trading days (Mon-Fri)\n"
-                    "• Ticker symbol is correct"
-                )
-                
-        except Exception as e:
-            logger.error(f"Error querying zone data: {e}")
-            self.statusBar().showMessage("Query failed", 3000)
-            QMessageBox.critical(
-                self, 
-                "Query Error", 
-                f"Error querying candle data:\n\n{str(e)}\n\n"
-                "Please check your Polygon connection and try again."
-            )
-        
-        finally:
-            # Re-enable button
-            self.query_data_btn.setEnabled(True)
-            self.query_data_btn.setText("Query Data")
     
     @pyqtSlot()
     def _on_run_analysis(self):
@@ -507,14 +285,6 @@ class OverviewWidget(QWidget):
         """Validate data and trigger save (called from main window)"""
         self._on_save_to_database()
     
-    # Add this method to store results when analysis completes
-    def store_confluence_results(self, results: Dict[str, Any]):
-        """Store raw confluence results from analysis"""
-        if 'confluence_results' in results:
-            self._confluence_results = results['confluence_results']
-            logger.debug(f"Stored raw confluence results")
-    
-    # Update collect_session_data method - replace the confluence capture section:
     def collect_session_data(self) -> Dict[str, Any]:
         """Collect all session data from the widget with debugging"""
         logger.debug("Starting data collection...")
@@ -555,8 +325,8 @@ class OverviewWidget(QWidget):
         # Collect all metric values
         logger.debug("Collecting metrics...")
         metrics_data['atr_5min'] = get_metric_value(self.metrics_frame.atr_5min, "atr_5min")
-        metrics_data['atr_2hour'] = get_metric_value(self.metrics_frame.atr_2hour, "atr_2hour")
         metrics_data['atr_15min'] = get_metric_value(self.metrics_frame.atr_15min, "atr_15min")
+        metrics_data['atr_2hour'] = get_metric_value(self.metrics_frame.atr_2hour, "atr_2hour")
         metrics_data['daily_atr'] = get_metric_value(self.metrics_frame.daily_atr, "daily_atr")
         metrics_data['atr_high'] = get_metric_value(self.metrics_frame.atr_high, "atr_high")
         metrics_data['atr_low'] = get_metric_value(self.metrics_frame.atr_low, "atr_low")
@@ -571,10 +341,10 @@ class OverviewWidget(QWidget):
         daily_data = self.daily_frame.get_data()
         logger.debug(f"  Daily data keys: {list(daily_data.keys())}")
         
-        # Collect zones
-        logger.debug("Collecting zone data...")
-        zones_data = self.zone_table.get_zone_data()
-        logger.debug(f"  Zones: {len(zones_data)} zones collected")
+        # Collect pivot confluence settings
+        logger.debug("Collecting pivot confluence settings...")
+        pivot_confluence_settings = self.pivot_confluence_widget.get_confluence_settings()
+        logger.debug(f"  Pivot confluence settings: {len(pivot_confluence_settings)} levels")
         
         # Build final data structure
         session_data = {
@@ -583,26 +353,11 @@ class OverviewWidget(QWidget):
             'datetime': datetime_val,
             'weekly': weekly_data,
             'daily': daily_data,
-            'zones': zones_data,
+            'pivot_confluence_settings': pivot_confluence_settings,  # NEW
             'pre_market_price': pre_market_price,
             'metrics': metrics_data,
             'timestamp': datetime.now()
         }
-        
-        # Capture confluence results if analysis has been run
-        confluence_text = self.zones_ranked.toPlainText()
-        if confluence_text and confluence_text != "M15 Zones Confluence Ranking will appear here after analysis...":
-            session_data['confluence_text'] = confluence_text
-            logger.debug(f"Confluence text captured: {len(confluence_text)} characters")
-            logger.debug(f"Confluence text type: {type(confluence_text)}")  # Debug logging
-            
-            # Also capture raw confluence results if available
-            if hasattr(self, '_confluence_results') and self._confluence_results:
-                session_data['confluence_results'] = self._confluence_results
-                logger.debug(f"Raw confluence results captured")
-                logger.debug(f"Confluence results type: {type(self._confluence_results)}")  # Debug logging
-        else:
-            logger.debug("No confluence results to capture (analysis not run or placeholder text)")
         
         logger.debug("Data collection complete")
         return session_data
@@ -681,53 +436,12 @@ class OverviewWidget(QWidget):
                     if i < len(self.daily_frame.price_levels):
                         self.daily_frame.price_levels[i].setValue(float(level))
         
-        # Load zones
-        if 'zones' in session_data and session_data['zones']:
-            for row, zone in enumerate(session_data['zones'][:6]):
-                zone_data = {}
-                
-                # Handle datetime formats
-                if 'datetime' in zone and zone['datetime']:
-                    # Split datetime into date and time
-                    datetime_str = zone['datetime']
-                    if 'T' in datetime_str or ' ' in datetime_str:
-                        # Full datetime format
-                        try:
-                            dt = datetime.fromisoformat(datetime_str.replace('Z', '+00:00'))
-                            zone_data['date'] = dt.strftime('%Y-%m-%d')
-                            zone_data['time'] = dt.strftime('%H:%M:%S')
-                        except:
-                            # Fallback: treat as time only
-                            zone_data['time'] = datetime_str
-                    else:
-                        # Just time format (backward compatibility)
-                        zone_data['time'] = datetime_str
-                
-                # Handle separate date/time fields if they exist
-                if 'date' in zone:
-                    zone_data['date'] = zone['date']
-                if 'time' in zone:
-                    zone_data['time'] = zone['time']
-                
-                if 'level' in zone:
-                    zone_data['level'] = zone['level']
-                if 'high' in zone:
-                    zone_data['high'] = zone['high']
-                if 'low' in zone:
-                    zone_data['low'] = zone['low']
-                
-                self.zone_table.set_zone_data(row, zone_data)
-        
         # After loading, fetch market data if we have a ticker
         if 'ticker' in session_data:
             self._fetch_market_data()
     
     def update_calculations(self, results: Dict[str, Any]):
         """Update calculation displays with analysis results"""
-        # Store raw confluence results if available
-        if 'confluence_results' in results:
-            self.store_confluence_results(results)
-        
         # Update metrics
         if 'metrics' in results:
             self.metrics_frame.update_metrics(results['metrics'])
@@ -751,28 +465,16 @@ class OverviewWidget(QWidget):
         # Update Zone displays
         if 'weekly_zones' in results:
             self.calculations.weekly_zones.text_area.setText(results['weekly_zones'])
-        
-        # Update Daily Zones display
         if 'daily_zones' in results:
             self.calculations.daily_zones.text_area.setText(results['daily_zones'])
-        
-        # Update ATR Zones Display
         if 'atr_zones' in results:
             self.calculations.atr_zones.text_area.setText(results['atr_zones'])
-        else:
-            # Show informative message if ATR zones couldn't be calculated
-            self.calculations.atr_zones.text_area.setText(
-                "ATR Zones: Pending calculation\n\n"
-                "ATR zones require:\n"
-                "• Daily ATR value\n"
-                "• 5-minute ATR value\n"
-                "• Current price\n\n"
-                "These will be calculated during analysis."
-            )
         
-        # Update zones ranking
-        if 'zones_ranked' in results:
-            self.zones_ranked.setText(results['zones_ranked'])
+        # UPDATE: Pivot confluence widget with results
+        if 'pivot_confluence_results' in results:
+            self.pivot_confluence_widget.update_pivot_data(results['pivot_confluence_results'])
+        
+        # REMOVED: zones_ranked text widget (now handled by pivot confluence widget)
     
     def clear_all(self):
         """Clear all input fields and results"""
@@ -791,13 +493,10 @@ class OverviewWidget(QWidget):
         # Clear metrics
         self.metrics_frame.clear_all()
         
-        # Clear table
-        self.zone_table.clear_all_zones()
+        # Clear pivot confluence widget
+        self.pivot_confluence_widget.clear_data()
         
-        # Clear stored confluence results
-        self._confluence_results = None
-        
-        # Clear calculations - ALL displays including zones
+        # Clear calculations
         self.calculations.hvn_7day.text_area.clear()
         self.calculations.hvn_14day.text_area.clear()
         self.calculations.hvn_30day.text_area.clear()
@@ -808,20 +507,13 @@ class OverviewWidget(QWidget):
         self.calculations.daily_zones.text_area.clear()
         self.calculations.atr_zones.text_area.clear()
         
-        # Clear zones ranked
-        self.zones_ranked.clear()
-        
-        # Reset placeholders for HVN
+        # Reset placeholders
         self.calculations.hvn_7day.text_area.setPlaceholderText("HVN 7-day analysis will appear here...")
         self.calculations.hvn_14day.text_area.setPlaceholderText("HVN 14-day analysis will appear here...")
         self.calculations.hvn_30day.text_area.setPlaceholderText("HVN 30-day analysis will appear here...")
-        
-        # Reset placeholders for Camarilla
         self.calculations.cam_monthly.text_area.setPlaceholderText("Monthly Camarilla pivots will appear here...")
         self.calculations.cam_weekly.text_area.setPlaceholderText("Weekly Camarilla pivots will appear here...")
         self.calculations.cam_daily.text_area.setPlaceholderText("Daily Camarilla pivots will appear here...")
-        
-        # Reset placeholders for Zones
         self.calculations.weekly_zones.text_area.setPlaceholderText("Weekly zones will appear here after analysis...\n\nCreated from WL1-WL4 ± 2-Hour ATR")
         self.calculations.daily_zones.text_area.setPlaceholderText("Daily zones will appear here after analysis...\n\nCreated from DL1-DL6 ± 15-Minute ATR")
         self.calculations.atr_zones.text_area.setPlaceholderText(
@@ -830,9 +522,6 @@ class OverviewWidget(QWidget):
             "• ATR High: Current + Daily ATR ± 5min ATR\n"
             "• ATR Low: Current - Daily ATR ± 5min ATR"
         )
-        
-        # Reset zones ranked placeholder
-        self.zones_ranked.setPlaceholderText("M15 Zones Confluence Ranking will appear here after analysis...")
         
         # Emit data changed signal to reset the modified flag
         self.data_changed.emit()

@@ -1,6 +1,7 @@
 """
 Database service layer for Meridian Trading System
 Handles communication between UI and database with enhanced debugging
+UPDATED: Pure Pivot Confluence System - M15 zones completely removed
 """
 
 import logging
@@ -13,7 +14,7 @@ import json
 from PyQt6.QtCore import QObject, pyqtSignal
 
 from data.models import (
-    TradingSession, PriceLevel, WeeklyData, DailyData, TrendDirection
+    TradingSession, WeeklyData, DailyData, TrendDirection
 )
 from data.supabase_client import SupabaseClient
 from data.validators import validate_trading_session
@@ -28,7 +29,8 @@ logger = logging.getLogger(__name__)
 
 
 class DatabaseService(QObject):
-    """Service class for database operations with Qt signal support and debugging"""
+    """Service class for database operations with Qt signal support and debugging
+    UPDATED: Pure Pivot Confluence System"""
     
     # Signals for UI feedback
     save_started = pyqtSignal()
@@ -47,7 +49,7 @@ class DatabaseService(QObject):
     def _initialize_client(self):
         """Initialize the Supabase client with debugging"""
         logger.info("="*60)
-        logger.info("INITIALIZING DATABASE CLIENT")
+        logger.info("INITIALIZING DATABASE CLIENT - PIVOT CONFLUENCE SYSTEM")
         logger.info("="*60)
         
         try:
@@ -67,7 +69,7 @@ class DatabaseService(QObject):
                     url=config.SUPABASE_URL,
                     key=config.SUPABASE_KEY
                 )
-                logger.info("Database client initialized successfully")
+                logger.info("Database client initialized successfully (Pivot Confluence)")
             else:
                 logger.error("Configuration validation failed")
                 logger.error("Please check your .env file has SUPABASE_URL and SUPABASE_KEY")
@@ -80,10 +82,10 @@ class DatabaseService(QObject):
     
     def save_session(self, session_data: Dict[str, Any]) -> Tuple[bool, Optional[str]]:
         """
-        Save a trading session with detailed debugging
+        Save a trading session with detailed debugging - Pure Pivot Confluence System
         """
         logger.info("="*60)
-        logger.info("DATABASE SERVICE: SAVE SESSION START")
+        logger.info("DATABASE SERVICE: SAVE SESSION START - PIVOT CONFLUENCE")
         logger.info("="*60)
         
         if not self.client:
@@ -96,16 +98,16 @@ class DatabaseService(QObject):
         
         try:
             # Step 1: Log incoming data
-            logger.info("Step 1: Analyzing incoming session data...")
+            logger.info("Step 1: Analyzing incoming session data (Pivot Confluence)...")
             self._log_data_structure(session_data)
             
             # Step 2: Create session from UI data
-            logger.info("Step 2: Creating TradingSession object from UI data...")
+            logger.info("Step 2: Creating PivotTradingSession object from UI data...")
             session = self._create_session_from_ui_data(session_data)
-            logger.info(f"Session created: ticker_id = {session.ticker_id}")
+            logger.info(f"Pivot session created: ticker_id = {session.ticker_id}")
             
             # Step 3: Log session object details
-            logger.info("Step 3: Validating session object...")
+            logger.info("Step 3: Validating pivot session object...")
             self._log_session_object(session)
             
             # Step 4: Validate the session
@@ -117,45 +119,45 @@ class DatabaseService(QObject):
                 self._log_validation_errors(errors)
                 self.save_failed.emit(error_msg)
                 return False, error_msg
-            logger.info("Validation passed")
+            logger.info("Pivot session validation passed")
             
             # Step 5: Check for existing session
-            logger.info(f"Step 5: Checking if session exists: {session.ticker_id}")
+            logger.info(f"Step 5: Checking if pivot session exists: {session.ticker_id}")
             try:
                 existing = self.client.get_session(session.ticker_id)
-                logger.info(f"Existing session found: {existing is not None}")
+                logger.info(f"Existing pivot session found: {existing is not None}")
             except Exception as e:
                 logger.warning(f"Error checking for existing session: {e}")
                 existing = None
             
             # Step 6: Save to database
             if existing:
-                logger.info(f"Step 6: Updating existing session: {session.ticker_id}")
+                logger.info(f"Step 6: Updating existing pivot session: {session.ticker_id}")
                 success = self.client.update_session(session)
                 if success:
-                    logger.info(f"Session updated successfully: {session.ticker_id}")
+                    logger.info(f"Pivot session updated successfully: {session.ticker_id}")
                     self.save_completed.emit(session.ticker_id)
                     return True, session.ticker_id
                 else:
-                    error_msg = "Failed to update session in database"
+                    error_msg = "Failed to update pivot session in database"
                     logger.error(error_msg)
                     self.save_failed.emit(error_msg)
                     return False, error_msg
             else:
-                logger.info(f"Step 6: Creating new session: {session.ticker_id}")
+                logger.info(f"Step 6: Creating new pivot session: {session.ticker_id}")
                 success, session_id = self.client.create_session(session)
                 if success:
-                    logger.info(f"Session created successfully with ID: {session_id}")
+                    logger.info(f"Pivot session created successfully with ID: {session_id}")
                     self.save_completed.emit(session_id)
                     return True, session_id
                 else:
-                    error_msg = "Failed to create session in database - check Supabase logs"
+                    error_msg = "Failed to create pivot session in database - check Supabase logs"
                     logger.error(error_msg)
                     self.save_failed.emit(error_msg)
                     return False, error_msg
                     
         except Exception as e:
-            error_msg = f"Error saving session: {str(e)}"
+            error_msg = f"Error saving pivot session: {str(e)}"
             logger.error(error_msg)
             logger.error(f"Exception type: {type(e).__name__}")
             logger.error(f"Traceback:\n{traceback.format_exc()}")
@@ -163,7 +165,7 @@ class DatabaseService(QObject):
             return False, error_msg
         finally:
             logger.info("="*60)
-            logger.info("DATABASE SERVICE: SAVE SESSION END")
+            logger.info("DATABASE SERVICE: SAVE PIVOT SESSION END")
             logger.info("="*60)
     
     def _log_data_structure(self, data: Dict[str, Any], indent: int = 0):
@@ -189,8 +191,8 @@ class DatabaseService(QObject):
                     logger.debug(f"{prefix}{key}: {value} ({type(value).__name__})")
     
     def _log_session_object(self, session: TradingSession):
-        """Log details of the session object"""
-        logger.debug("Session object details:")
+        """Log details of the pivot session object"""
+        logger.debug("Pivot Session object details:")
         logger.debug(f"  ticker: {session.ticker}")
         logger.debug(f"  ticker_id: {session.ticker_id}")
         logger.debug(f"  date: {session.date}")
@@ -219,15 +221,29 @@ class DatabaseService(QObject):
         else:
             logger.debug("  daily_data: None")
         
-        # Log metrics - UPDATED to use atr_2hour
+        # Log metrics - Updated for pivot system
         logger.debug(f"  pre_market_price: {session.pre_market_price}")
         logger.debug(f"  ATR metrics: 5m={session.atr_5min}, 2hr={session.atr_2hour}, 15m={session.atr_15min}")
         logger.debug(f"  daily_atr: {session.daily_atr}, high={session.atr_high}, low={session.atr_low}")
         
-        # Log M15 levels
-        logger.debug(f"  m15_levels: {len(session.m15_levels)} levels")
-        for i, level in enumerate(session.m15_levels[:3]):  # Log first 3
-            logger.debug(f"    Level {i+1}: price={level.line_price}, high={level.candle_high}, low={level.candle_low}")
+        # Log pivot confluence data
+        if hasattr(session, 'pivot_confluence_results'):
+            if session.pivot_confluence_results:
+                logger.debug(f"  pivot_confluence_results: Present")
+                if hasattr(session.pivot_confluence_results, 'pivot_zones'):
+                    logger.debug(f"    pivot_zones count: {len(session.pivot_confluence_results.pivot_zones)}")
+                    for zone in session.pivot_confluence_results.pivot_zones[:3]:  # Log first 3
+                        logger.debug(f"      {zone.level_name}: price=${zone.pivot_price:.2f}, "
+                                   f"score={zone.confluence_score:.1f}, level=L{zone.level_designation.value}")
+            else:
+                logger.debug("  pivot_confluence_results: None")
+        
+        if hasattr(session, 'pivot_confluence_settings'):
+            logger.debug(f"  pivot_confluence_settings: {bool(session.pivot_confluence_settings)}")
+        
+        if hasattr(session, 'pivot_confluence_text'):
+            text_len = len(session.pivot_confluence_text) if session.pivot_confluence_text else 0
+            logger.debug(f"  pivot_confluence_text: {text_len} characters")
     
     def _log_validation_errors(self, errors: Dict[str, Any]):
         """Log validation errors in detail"""
@@ -239,8 +255,8 @@ class DatabaseService(QObject):
             logger.error(f"  {errors}")
     
     def _create_session_from_ui_data(self, data: Dict[str, Any]) -> TradingSession:
-        """Convert UI data format to TradingSession model with debugging"""
-        logger.debug("Converting UI data to TradingSession...")
+        """Convert UI data format to TradingSession model - Pure Pivot Confluence System"""
+        logger.debug("Converting UI data to PivotTradingSession...")
         
         # Parse the datetime
         session_datetime = data['datetime']
@@ -253,7 +269,7 @@ class DatabaseService(QObject):
             date=session_date,
             is_live=data['is_live']
         )
-        logger.debug(f"Base session created: {session.ticker_id}")
+        logger.debug(f"Base pivot session created: {session.ticker_id}")
         
         # If not live, use the entered date/time as historical
         if not data['is_live']:
@@ -327,7 +343,8 @@ class DatabaseService(QObject):
             metrics = data['metrics']
             if 'atr_5min' in metrics:
                 session.atr_5min = Decimal(str(metrics['atr_5min']))
-            if 'atr_2hour' in metrics:  # Using atr_2hour consistently
+                logger.debug(f"5min ATR set (used for pivot zones): {session.atr_5min}")
+            if 'atr_2hour' in metrics:
                 session.atr_2hour = Decimal(str(metrics['atr_2hour']))
                 logger.debug(f"ATR 2-hour set: {session.atr_2hour}")
             if 'atr_15min' in metrics:
@@ -341,72 +358,52 @@ class DatabaseService(QObject):
             
             logger.debug(f"Metrics set - 5min: {session.atr_5min}, 2hr: {session.atr_2hour}, 15min: {session.atr_15min}")
         
-        # Process M15 zones
-        if data.get('zones'):
-            logger.debug(f"Processing {len(data['zones'])} M15 zones...")
-            successful_zones = 0
-            
-            for i, zone in enumerate(data['zones']):
-                try:
-                    zone_num = zone.get('zone_number', i + 1)
-                    level_value = Decimal(str(zone.get('level', 0))) if zone.get('level') else Decimal("0")
+        # Process pivot confluence results
+        if data.get('pivot_confluence_results'):
+            logger.debug("Processing pivot confluence results...")
+            try:
+                session.pivot_confluence_results = data['pivot_confluence_results']
+                if hasattr(session.pivot_confluence_results, 'pivot_zones'):
+                    zones_count = len(session.pivot_confluence_results.pivot_zones)
+                    logger.debug(f"Attached {zones_count} pivot confluence zones")
                     
-                    if level_value > 0:  # Only add non-zero levels
-                        level_id = session.generate_level_id(len(session.m15_levels))
-                        
-                        high_value = Decimal(str(zone.get('high', 0))) if zone.get('high') else level_value
-                        low_value = Decimal(str(zone.get('low', 0))) if zone.get('low') else level_value
-                        
-                        level = PriceLevel(
-                            line_price=level_value,
-                            candle_datetime=session_datetime,
-                            candle_high=high_value,
-                            candle_low=low_value,
-                            level_id=level_id
-                        )
-                        session.m15_levels.append(level)
-                        successful_zones += 1
-                        logger.debug(f"  Zone {zone_num}: level={level_value}, high={high_value}, low={low_value}")
-                        
-                except Exception as e:
-                    logger.warning(f"Error processing zone {i}: {e}")
-            
-            logger.debug(f"Added {successful_zones} M15 zones")
+                    # Log zone summaries
+                    for zone in session.pivot_confluence_results.pivot_zones:
+                        logger.debug(f"  Zone {zone.level_name}: ${zone.pivot_price:.2f}, "
+                                   f"score={zone.confluence_score:.1f}, level=L{zone.level_designation.value}")
+                else:
+                    logger.warning("Pivot confluence results missing pivot_zones attribute")
+            except Exception as e:
+                logger.error(f"Error processing pivot confluence results: {e}")
+                session.pivot_confluence_results = None
         
-        # Store confluence text and results as attributes if present
-        # Handle confluence_text - ensure it's actually text
-        if 'confluence_text' in data:
-            confluence_text_value = data.get('confluence_text', '')
-            # Check if it's accidentally the object instead of text
-            if hasattr(confluence_text_value, '__class__') and 'ConfluenceResult' in str(confluence_text_value.__class__):
-                logger.error("WARNING: confluence_text contains ConfluenceResult object instead of text!")
-                session.confluence_text = None
-                # Store the object in the correct attribute
-                session.confluence_results = confluence_text_value
-            else:
-                session.confluence_text = confluence_text_value
-                logger.debug(f"Confluence text attached: {len(session.confluence_text) if session.confluence_text else 0} chars")
-        else:
-            session.confluence_text = None
+        # Process pivot confluence settings
+        if data.get('pivot_confluence_settings'):
+            logger.debug("Processing pivot confluence settings...")
+            try:
+                session.pivot_confluence_settings = json.dumps(data['pivot_confluence_settings'])
+                settings_count = len(data['pivot_confluence_settings'])
+                logger.debug(f"Stored pivot confluence settings for {settings_count} levels")
+            except Exception as e:
+                logger.error(f"Error processing pivot confluence settings: {e}")
+                session.pivot_confluence_settings = None
         
-        # Handle confluence_results - this should be the object
-        if 'confluence_results' in data:
-            confluence_results_value = data.get('confluence_results')
-            # This SHOULD be the ConfluenceResult object
-            if confluence_results_value:
-                session.confluence_results = confluence_results_value
-                logger.debug(f"Raw confluence results attached: type={type(confluence_results_value)}")
-            else:
-                session.confluence_results = None
-        elif not hasattr(session, 'confluence_results'):
-            # Only set to None if we didn't already set it from the text field mix-up
-            session.confluence_results = None
+        # Process pivot confluence text (formatted results)
+        if data.get('zones_ranked'):
+            logger.debug("Processing pivot confluence text...")
+            try:
+                session.pivot_confluence_text = data['zones_ranked']
+                text_length = len(session.pivot_confluence_text) if session.pivot_confluence_text else 0
+                logger.debug(f"Stored pivot confluence text: {text_length} characters")
+            except Exception as e:
+                logger.error(f"Error processing pivot confluence text: {e}")
+                session.pivot_confluence_text = None
         
-        logger.info(f"Session creation complete: {session.ticker_id}")
+        logger.info(f"Pivot session creation complete: {session.ticker_id}")
         return session
     
     def load_session(self, ticker_id: str) -> Optional[Dict[str, Any]]:
-        """Load a trading session and convert to UI format"""
+        """Load a pivot trading session and convert to UI format"""
         if not self.client:
             self.load_failed.emit("Database client not initialized")
             return None
@@ -420,11 +417,11 @@ class DatabaseService(QObject):
                 self.load_completed.emit(ui_data)
                 return ui_data
             else:
-                self.load_failed.emit(f"Session not found: {ticker_id}")
+                self.load_failed.emit(f"Pivot session not found: {ticker_id}")
                 return None
                 
         except Exception as e:
-            error_msg = f"Error loading session: {str(e)}"
+            error_msg = f"Error loading pivot session: {str(e)}"
             logger.error(error_msg)
             self.load_failed.emit(error_msg)
             return None
@@ -432,7 +429,7 @@ class DatabaseService(QObject):
     def list_sessions(self, ticker: Optional[str] = None,
                      start_date: Optional[date] = None,
                      end_date: Optional[date] = None) -> List[Dict[str, Any]]:
-        """List available sessions with optional filters"""
+        """List available pivot sessions with optional filters"""
         if not self.client:
             return []
         
@@ -448,7 +445,7 @@ class DatabaseService(QObject):
                     'is_live': session.is_live,
                     'has_weekly': session.weekly_data is not None,
                     'has_daily': session.daily_data is not None,
-                    'level_count': len(session.m15_levels),
+                    'has_pivot_confluence': hasattr(session, 'pivot_confluence_results') and session.pivot_confluence_results is not None,
                     'created_at': session.created_at
                 }
                 summaries.append(summary)
@@ -456,11 +453,11 @@ class DatabaseService(QObject):
             return summaries
             
         except Exception as e:
-            logger.error(f"Error listing sessions: {e}")
+            logger.error(f"Error listing pivot sessions: {e}")
             return []
     
     def _convert_session_to_ui_format(self, session: TradingSession) -> Dict[str, Any]:
-        """Convert TradingSession model to UI data format"""
+        """Convert TradingSession model to UI data format - Pure Pivot Confluence System"""
         ui_data = {
             'ticker': session.ticker,
             'is_live': session.is_live,
@@ -468,10 +465,10 @@ class DatabaseService(QObject):
             'timestamp': session.created_at or datetime.now()
         }
         
-        # Add metrics - UPDATED to use atr_2hour
+        # Add metrics - Pure pivot system
         ui_data['metrics'] = {
             'atr_5min': float(session.atr_5min) if session.atr_5min else 0,
-            'atr_2hour': float(session.atr_2hour) if session.atr_2hour else 0,  # Changed from atr_10min
+            'atr_2hour': float(session.atr_2hour) if session.atr_2hour else 0,
             'atr_15min': float(session.atr_15min) if session.atr_15min else 0,
             'daily_atr': float(session.daily_atr) if session.daily_atr else 0,
             'atr_high': float(session.atr_high) if session.atr_high else 0,
@@ -507,27 +504,21 @@ class DatabaseService(QObject):
                 'notes': session.daily_data.notes
             }
         
-        # Add M15 zones
-        zones = []
-        for i, level in enumerate(session.m15_levels):
-            zone = {
-                'zone_number': i + 1,
-                'date': level.candle_datetime.strftime('%Y-%m-%d'),
-                'time': level.candle_datetime.strftime('%H:%M:%S'),
-                'level': str(level.line_price),
-                'high': str(level.candle_high),
-                'low': str(level.candle_low)
-            }
-            zones.append(zone)
-        ui_data['zones'] = zones
+        # Add pivot confluence data
+        if hasattr(session, 'pivot_confluence_results') and session.pivot_confluence_results:
+            ui_data['pivot_confluence_results'] = session.pivot_confluence_results
+            logger.debug("Loaded raw pivot confluence results")
         
-        # Add confluence data if present
-        if hasattr(session, 'confluence_text') and session.confluence_text:
-            ui_data['confluence_text'] = session.confluence_text
-            logger.debug(f"Loaded confluence text: {len(session.confluence_text)} chars")
+        if hasattr(session, 'pivot_confluence_settings') and session.pivot_confluence_settings:
+            try:
+                ui_data['pivot_confluence_settings'] = json.loads(session.pivot_confluence_settings)
+                logger.debug("Loaded pivot confluence settings")
+            except (json.JSONDecodeError, TypeError) as e:
+                logger.warning(f"Error parsing pivot confluence settings: {e}")
+                ui_data['pivot_confluence_settings'] = {}
         
-        if hasattr(session, 'confluence_results') and session.confluence_results:
-            ui_data['confluence_results'] = session.confluence_results
-            logger.debug("Loaded raw confluence results")
+        if hasattr(session, 'pivot_confluence_text') and session.pivot_confluence_text:
+            ui_data['zones_ranked'] = session.pivot_confluence_text
+            logger.debug(f"Loaded pivot confluence text: {len(session.pivot_confluence_text)} chars")
         
         return ui_data

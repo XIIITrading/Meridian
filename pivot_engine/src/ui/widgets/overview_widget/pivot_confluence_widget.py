@@ -135,8 +135,8 @@ class PivotConfluenceWidget(QWidget):
         
         # Initialize with level names
         level_names = ['R6', 'R4', 'R3', 'S3', 'S4', 'S6']
-        level_colors = [DarkTheme.DANGER, DarkTheme.WARNING, DarkTheme.INFO,
-                       DarkTheme.INFO, DarkTheme.WARNING, DarkTheme.DANGER]
+        level_colors = [DarkTheme.ERROR, DarkTheme.WARNING, DarkTheme.INFO,
+                       DarkTheme.INFO, DarkTheme.WARNING, DarkTheme.ERROR]
         
         for row, (level_name, color) in enumerate(zip(level_names, level_colors)):
             # Level name

@@ -15,7 +15,7 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 import json
 
-from data.models import TradingSession, PriceLevel
+from data.models import TradingSession
 
 logger = logging.getLogger(__name__)
 

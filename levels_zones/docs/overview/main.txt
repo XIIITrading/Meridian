@@ -1,0 +1,267 @@
+MERIDIAN TRADING SYSTEM - PROJECT STRUCTURE & FUNCTIONALITY DOCUMENTATION
+==========================================================================
+
+PROJECT OVERVIEW
+----------------
+The Meridian Trading System is a pre-market trading analysis application that focuses on identifying High Volume Node (HVN) zones and calculating confluence with various technical levels including Order Blocks, Camarilla Pivots, and Structure levels. The system features a PyQt6-based GUI with dark theme support and integrates with Supabase for data storage and Polygon API for market data.
+
+DIRECTORY STRUCTURE
+-------------------
+levels_zones/
+├── config.py
+├── confluence_analyzer.py
+├── main.py
+├── setup.py
+├── data/              (created at runtime)
+├── logs/              (created at runtime)
+├── src/
+│   └── ui/
+│       ├── __init__.py
+│       ├── dark_theme.py
+│       └── [main window components]
+└── calculations/      (imported but not shown)
+
+FILE DESCRIPTIONS & COMPONENTS
+==============================
+
+1. config.py
+------------
+PURPOSE: Central configuration management for the entire Meridian Trading System. Handles environment variables, application settings, and validation.
+
+IMPORTS:
+- os, pathlib.Path, dotenv.load_dotenv, logging
+
+KEY COMPONENTS:
+
+Directory Management:
+- BASE_DIR: Parent directory path reference
+- DATA_DIR: Data storage directory (auto-created)
+- LOGS_DIR: Log files directory (auto-created)
+
+Class: Config
+- Static configuration class for application-wide settings
+- Properties:
+  * APP_NAME: "Meridian Trading System"
+  * APP_VERSION: "1.0.0"
+  * LOG_LEVEL: "INFO"
+  * DEBUG_MODE: Reads from environment variable
+  * MAX_PRICE_LEVELS: Set to 6 (3 above, 3 below)
+  * DEFAULT_ATR_PERIOD: Set to 14
+- Methods:
+  * validate(): Static method that calls module-level validate_config()
+
+Module-Level Variables (for backward compatibility):
+- APP_NAME, APP_VERSION, DEBUG_MODE, MAX_PRICE_LEVELS, DEFAULT_ATR_PERIOD
+- SUPABASE_URL: From environment variable
+- SUPABASE_KEY: From environment variable
+- POLYGON_API_KEY: From environment variable
+- POLYGON_REST_URL: Defaults to "http://localhost:8200"
+- LOG_LEVEL: DEBUG or INFO based on DEBUG_MODE
+- LOG_FORMAT: Standard logging format string
+
+Functions:
+- validate_config(): Validates Supabase configuration
+  * Checks for presence of SUPABASE_URL and SUPABASE_KEY
+  * Validates URL format (must start with https://)
+  * Warns if URL doesn't contain '.supabase.co'
+  * Returns boolean for validation success
+
+Logging Setup:
+- Configures both file and console handlers
+- Uses configured LOG_LEVEL and LOG_FORMAT
+- Writes to 'meridian.log' in LOGS_DIR
+
+
+2. confluence_analyzer.py
+-------------------------
+PURPOSE: Core analysis engine for identifying and scoring HVN (High Volume Node) zones with confluence from multiple technical indicators.
+
+IMPORTS:
+- pandas, numpy, collections.defaultdict, os
+
+CLASS: ConfluenceZoneAnalyzer
+
+Constructor Parameters:
+- weight_config: Dictionary of weights for different level types
+  * Default weights: weekly_cam=4, daily_structure=3, h4_ob=2.5, daily_cam=1
+- zone_margin: Percentage to expand HVN zones for confluence testing (default 0.005 = 0.5%)
+
+METHODS:
+
+get_hvn_zones(row):
+- Extracts HVN zones from data row
+- Processes 4 zones: BHVN1, BHVN2 (below), AHVN1, AHVN2 (above)
+- For each zone creates dictionary with:
+  * name, position (above/below)
+  * original_low, original_high (actual zone boundaries)
+  * test_low, test_high (expanded boundaries for confluence testing)
+  * center, zone_size
+  * confluent_levels list (initially empty)
+  * confluence_score (initially 0)
+- Returns list of HVN zone dictionaries
+
+get_confluence_levels(row):
+- Extracts all technical levels that could provide confluence
+- Processes multiple level types:
+  * H4 Order Block Zones (H4S2, H4S1, H4R1, H4R2)
+    - Creates levels for zone low, high, and center
+    - Includes ob_type (support/resistance)
+  * Daily Structure Levels (AD3, AD2, AD1, BD1, BD2, BD3)
+  * Daily Camarilla Pivots (S6, S4, S3, R3, R4, R6)
+  * Weekly Camarilla Pivots (WS6, WS4, WS3, WR3, WR4, WR6)
+- Each level includes: type, name, price, weight
+- Returns list of level dictionaries
+
+calculate_hvn_confluence(hvn_zones, confluence_levels):
+- Calculates confluence score for each HVN zone
+- For each zone:
+  * Identifies levels within expanded zone boundaries
+  * Groups confluent levels by type
+  * Calculates total weight from all confluent levels
+  * Applies type diversity multiplier (1 + (types-1) * 0.25)
+  * Assigns strength category: Weak (<3), Moderate (3-8), Strong (8-15), Exceptional (>15)
+  * Flags if zone has Order Block confluence
+- Updates zone dictionaries with confluence data
+- Returns updated HVN zones list
+
+analyze_row(row):
+- Main analysis function for single data row
+- Workflow:
+  1. Extracts current price from 'Pre-Market Price' column
+  2. Gets all HVN zones
+  3. Gets all confluence levels
+  4. Calculates confluence for each HVN zone
+  5. Separates zones into resistance (above price) and support (below price)
+  6. Sorts zones by confluence score (primary) and distance (secondary)
+- Returns dictionary with:
+  * ticker, date, current_price
+  * resistance_zones, support_zones
+  * all_hvn_zones
+
+STANDALONE FUNCTION:
+
+analyze_levels_and_zones(csv_path='levels_zones.csv'):
+- Main entry point for analysis
+- Loads CSV data and processes each row
+- Creates detailed console output showing:
+  * HVN zones with confluence details
+  * Resistance and support zones ranked by strength
+  * Trading summary with primary levels
+- Error handling with traceback on failure
+- Returns list of analysis results
+
+
+3. main.py
+----------
+PURPOSE: Application entry point that initializes the PyQt6 GUI application with dark theme.
+
+IMPORTS:
+- sys, os, logging, pathlib.Path
+- PyQt6.QtWidgets.QApplication
+- PyQt6.QtCore.Qt
+- Local: config.Config, ui.MainWindow, ui.dark_theme.apply_dark_theme
+
+PATH CONFIGURATION:
+- Adds project root to sys.path
+- Adds src directory to sys.path for module imports
+
+LOGGING SETUP:
+- Configures logging with level from Config.LOG_LEVEL
+- Creates logger instance for main module
+
+FUNCTIONS:
+
+main():
+- Primary application entry point
+- Workflow:
+  1. Validates configuration using Config.validate()
+  2. Logs application startup with name and version
+  3. Logs Python path and project root (debug mode)
+  4. Creates QApplication instance
+  5. Sets application metadata (name, organization)
+  6. Applies dark theme using apply_dark_theme()
+  7. Creates and shows MainWindow
+  8. Runs Qt event loop
+- Exits with error code if configuration validation fails
+
+EXECUTION:
+- Calls main() when run as script
+
+
+4. setup.py
+-----------
+PURPOSE: Package configuration for pip installation and distribution.
+
+PACKAGE METADATA:
+- Name: "meridian-trading-system"
+- Version: "1.0.0"
+- Description: Pre-market trading analysis system with confluence calculations
+- Long description: Read from README.md
+
+CONFIGURATION:
+
+Dependencies (install_requires):
+- PyQt6>=6.5.0 (GUI framework)
+- python-dotenv>=1.0.0 (environment variable management)
+- supabase>=2.0.0 (database client)
+- polygon-api-client>=1.12.6 (market data API)
+- pandas>=2.0.3 (data analysis)
+- numpy>=1.24.3 (numerical computing)
+
+Package Discovery:
+- Uses find_packages() for automatic package detection
+
+Entry Points:
+- Console script "meridian" mapped to main:main function
+
+Python Version:
+- Requires Python 3.8 or higher
+
+
+REFERENCED BUT NOT PROVIDED MODULES
+====================================
+
+src/ui/__init__.py
+------------------
+- Likely exports MainWindow class
+- May contain other UI component exports
+
+src/ui/dark_theme.py
+--------------------
+- Contains apply_dark_theme(app) function
+- Applies dark theme styling to QApplication
+
+src/ui/MainWindow
+-----------------
+- Main application window class
+- Likely contains:
+  * Menu bar setup
+  * Central widget configuration
+  * Signal/slot connections
+  * Integration with analysis components
+
+calculations/ (module/package)
+------------------------------
+- Referenced in path imports but not shown
+- Likely contains additional calculation modules
+- May include technical indicator calculations
+
+DATA FLOW
+=========
+1. Configuration loaded from environment variables and config.py
+2. CSV data loaded via confluence_analyzer.py
+3. Analysis performed on HVN zones with confluence calculations
+4. Results displayed in PyQt6 GUI or console output
+5. Data persistence through Supabase
+6. Market data potentially fetched via Polygon API
+
+KEY FEATURES
+============
+- HVN (High Volume Node) zone identification
+- Multi-timeframe confluence analysis
+- Order Block integration
+- Camarilla Pivot calculations
+- Structure level analysis
+- Weighted scoring system for zone strength
+- Dark theme GUI interface
+- Real-time pre-market price analysis

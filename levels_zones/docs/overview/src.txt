@@ -1,0 +1,586 @@
+Directory Structure Overview
+levels_zones/
+├── src/
+│   ├── calculations/       # Analysis and calculation engines
+│   ├── data/               # Data models and database bridges
+│   ├── services/           # Service layer for data operations
+│   ├── ui/                 # User interface components
+│   └── utils/              # Utility functions
+└── config.py               # Application configuration
+
+Core Configuration
+/config.py
+Purpose: Central configuration management for the application
+
+Config class: Holds application metadata (name, version)
+Environment variables: SUPABASE_URL, SUPABASE_KEY, POLYGON_API_KEY
+validate_config(): Validates required environment variables are present
+Status: Contains app versioning and naming constants
+
+
+Data Layer (/src/data/)
+/src/data/models.py
+Purpose: Defines all data structures used throughout the application
+Enums:
+
+TrendDirection: Enumeration for Bull/Bear/Range market trends
+
+from_string(): Factory method to create enum from string
+
+
+
+Data Classes:
+
+PriceLevel: Represents a significant price level with candle data
+
+Fields: line_price, candle_datetime, candle_high, candle_low, level_id
+Methods: __post_init__(), to_dict(), from_dict()
+
+
+WeeklyData: Weekly analysis data container
+
+Fields: trend_direction, internal_trend, position_structure, eow_bias, price_levels, notes
+Methods: __post_init__(), to_dict(), from_dict()
+
+
+DailyData: Daily analysis data container
+
+Fields: trend_direction, internal_trend, position_structure, eod_bias, price_levels, notes
+Methods: __post_init__(), to_dict(), from_dict()
+
+
+TradingSession: Complete trading session data
+
+Fields: ticker, date, ticker_id, is_live, historical_date/time, weekly_data, daily_data, m15_levels, metrics (ATRs), timestamps
+Methods:
+
+calculate_atr_bands(): Calculates ATR high/low bands
+get_levels_sorted_by_price(): Returns sorted price levels
+get_levels_above_price(): Filters levels above given price
+get_levels_below_price(): Filters levels below given price
+generate_level_id(): Creates unique level IDs
+to_dict(), from_dict(): Serialization methods
+
+
+
+
+CalculatedMetrics: Container for calculated analysis metrics
+
+Fields: session_id, hvn_zones, camarilla_pivots, confluence_scores, calculated_at
+Methods: to_dict()
+
+
+
+/src/data/polygon_bridge.py
+Purpose: Bridge between application and Polygon REST API for market data
+PolygonBridge Class:
+
+Initialization: Sets up HTTP session with retry strategy
+Connection Management:
+
+test_connection(): Tests API server connectivity
+validate_ticker(): Validates ticker symbols
+
+
+Data Fetching:
+
+fetch_bars(): Generic OHLCV bar fetching with timeframe support
+get_historical_bars(): Compatibility wrapper for fetch_bars
+get_latest_price(): Retrieves current price for symbol
+get_session_data(): Comprehensive data fetch for trading session
+get_price_at_datetime(): Gets price at specific datetime
+get_candle_at_datetime(): Gets full candle data at datetime
+
+
+Calculations:
+
+calculate_atr(): Computes Average True Range from OHLC data
+update_session_metrics(): Updates TradingSession with calculated metrics
+
+
+Utility Methods:
+
+_find_nearest_time(): Finds nearest timestamp in DataFrame
+search_symbols(): Symbol search functionality
+clear_cache(): Cache management
+
+
+
+/src/data/supabase_client.py
+Purpose: Handles all database operations with Supabase
+SupabaseClient Class:
+
+Session Operations:
+
+create_session(): Creates new trading session in database
+get_session(): Retrieves session by ticker_id
+update_session(): Updates existing session
+list_sessions(): Lists sessions with optional filters
+save_to_levels_zones(): Saves to denormalized table for reporting
+
+
+Analysis Data Operations:
+
+save_weekly_analysis(): Persists weekly analysis data
+_get_weekly_analysis(): Retrieves weekly analysis
+save_daily_analysis(): Persists daily analysis data
+_get_daily_analysis(): Retrieves daily analysis
+
+
+Analysis Run Tracking:
+
+create_analysis_run(): Creates analysis run record
+complete_analysis_run(): Marks analysis run complete
+
+
+Private Helper Methods:
+
+_session_from_db(): Converts DB record to TradingSession
+_save_price_levels(): Saves price level collection
+_get_price_levels(): Retrieves price levels
+_delete_price_levels(): Removes price levels
+
+
+
+/src/data/validators.py
+Purpose: Comprehensive data validation layer
+Exception Classes:
+
+ValidationError: Custom exception with field and message
+
+Validator Classes:
+
+FieldValidator: Base validation for common field types
+
+validate_required(): Ensures field has value
+validate_decimal(): Decimal validation with bounds
+validate_percentage(): Validates 0-100 range
+validate_ticker(): Ticker symbol validation
+validate_date_range(): Date range validation
+validate_analysis_datetime(): DateTime validation (relaxed)
+validate_candle_datetime(): Candle datetime validation
+
+
+PriceLevelValidator: Price level specific validation
+
+validate_price_level(): Single level validation
+validate_price_levels_set(): Collection validation
+
+
+TradingSessionValidator: Session validation
+
+validate_session(): Comprehensive session validation
+validate_for_analysis(): Checks readiness for analysis
+
+
+ATRValidator: ATR calculation validation
+
+validate_atr_values(): Consistency checks for ATR values
+
+
+DateTimeValidator: Date/time validation
+
+validate_market_date(): Market date validation
+validate_session_date_consistency(): Candle datetime consistency
+
+
+
+Convenience Functions:
+
+validate_trading_session(): Wrapper for session validation
+validate_for_analysis(): Wrapper for analysis readiness
+validate_trading_session_lenient(): Ultra-lenient validation mode
+
+
+Services Layer (/src/services/)
+/src/services/database_service.py
+Purpose: Service layer between UI and database with Qt signal support
+DatabaseService Class (QObject):
+
+Signals:
+
+save_started, save_completed, save_failed
+load_started, load_completed, load_failed
+
+
+Core Methods:
+
+_initialize_client(): Sets up Supabase client
+save_session(): Saves session with validation and debugging
+load_session(): Loads and converts session to UI format
+list_sessions(): Returns session summaries
+
+
+Helper Methods:
+
+_log_data_structure(): Debug logging for data structures
+_log_session_object(): Detailed session logging
+_log_validation_errors(): Error detail logging
+_create_session_from_ui_data(): UI to model conversion
+_convert_session_to_ui_format(): Model to UI conversion
+
+
+
+/src/services/polygon_service.py
+Purpose: Market data operations with threading support
+PolygonDataWorker (QThread):
+
+Operations:
+
+_fetch_and_calculate(): Fetches data and calculates metrics
+_fetch_atr_data(): ATR-specific data fetching
+_fetch_hvn_analysis(): HVN analysis across timeframes
+
+
+Calculation Methods:
+
+_calculate_atr(): ATR computation
+_resample_data(): Timeframe resampling
+_get_price_at_datetime(): Price at specific time
+_get_session_open_price(): Market open price
+
+
+
+PolygonService (QObject):
+
+Signals:
+
+data_fetch_started/completed/failed
+hvn_analysis_started/completed/failed
+progress_update
+
+
+Methods:
+
+fetch_market_data(): Initiates market data fetch
+fetch_hvn_analysis(): Initiates HVN analysis
+get_cached_data(): Returns cached data
+clear_cache(): Clears data cache
+
+
+
+
+UI Layer (/src/ui/)
+/src/ui/app_window.py
+Purpose: Main application window with menu bar and signal coordination
+MainWindow Class:
+
+Initialization:
+
+Sets up services (database, polygon)
+Initializes UI with dark theme
+Connects all signals between components
+
+
+Core Methods:
+
+_init_ui(): UI setup with overview widget
+_setup_menu_bar(): Menu creation (inherited from mixin)
+_connect_signals(): Internal signal connections
+_connect_database_signals(): Database service connections
+_connect_polygon_signals(): Polygon service connections
+
+
+Event Handlers:
+
+_on_save_to_database(): Database save handler
+_on_fetch_market_data(): Market data fetch handler
+_on_market_data_ready(): Data ready handler
+_on_run_analysis(): Analysis execution handler
+_on_analysis_complete(): Analysis completion handler
+closeEvent(): Window close handling
+
+
+
+/src/ui/dark_theme.py
+Purpose: Complete dark theme configuration for the application
+DarkTheme Class:
+
+Color Definitions:
+
+Background colors (BG_DARKEST through BG_LIGHTER)
+Border colors (BORDER_DARK, NORMAL, LIGHT, FOCUS)
+Text colors (PRIMARY, SECONDARY, DISABLED, PLACEHOLDER)
+Accent colors (PRIMARY, HOVER, PRESSED)
+Status colors (SUCCESS, WARNING, ERROR, INFO)
+Trading colors (BULL, BEAR, RANGE)
+Zone colors array (6 distinct colors)
+
+
+Font Settings:
+
+Font families and sizes for different UI elements
+
+
+
+DarkStyleSheets Class:
+
+Contains complete stylesheets for all UI components:
+
+MAIN_WINDOW, WIDGET_CONTAINER, GROUP_BOX
+INPUT_FIELD, CALCULATION_TEXT_AREA, COMBO_BOX
+BUTTON_PRIMARY, BUTTON_SECONDARY
+TABLE, TEXT_AREA, LABEL variants
+CHECKBOX, SCROLL_BAR, MENU_BAR, MENU
+STATUS_BAR, TOOL_BAR, FRAME
+
+
+
+Functions:
+
+apply_dark_theme(): Applies theme to QApplication
+get_combined_stylesheet(): Returns combined stylesheet string
+
+/src/ui/dialogs/session_picker_dialog.py
+Purpose: Dialog for browsing and selecting saved sessions
+SessionPickerDialog Class:
+
+UI Components:
+
+Filter controls (ticker, date)
+Sessions table with columns for metadata
+
+
+Methods:
+
+_init_ui(): Dialog UI setup
+_populate_table(): Fills table with session data
+_apply_filters(): Applies ticker/date filters
+_clear_filters(): Resets filters
+_on_double_click(): Double-click selection
+_on_accept(): Selection confirmation
+
+
+
+/src/ui/main_window/ (Mixins)
+menu_manager.py
+MenuManagerMixin Class:
+
+_setup_menu_bar(): Creates all application menus
+_update_recent_sessions(): Updates recent sessions menu
+
+signal_handlers.py
+SignalHandlersMixin Class:
+
+Market data handlers: _on_market_data_ready(), _on_fetch_market_data()
+Data change handlers: _on_data_changed(), _on_save_to_database()
+Session handlers: _on_save_session(), _on_new_session(), _on_load_session()
+Database handlers: _on_browse_sessions(), _on_test_connection()
+Analysis handlers: _on_run_analysis(), _on_analysis_progress(), _on_analysis_finished(), _on_analysis_error()
+UI handlers: _on_show_results(), _on_about()
+
+database_handlers.py
+DatabaseHandlersMixin Class:
+
+Save handlers: _on_save_started(), _on_save_completed(), _on_save_failed()
+Load handlers: _on_load_started(), _on_load_completed(), _on_load_failed()
+_load_session_by_id(): Loads specific session
+
+window_helpers.py
+WindowHelpersMixin Class:
+
+_update_window_title(): Updates title with session info
+
+/src/ui/threads/analysis_thread.py
+Purpose: Background worker thread for running comprehensive analysis
+AnalysisThread (QThread):
+
+Signals:
+
+progress: Analysis progress updates
+finished: Analysis completion with results
+error: Error reporting
+debug_message: Debug status messages
+
+
+Core Methods:
+
+run(): Main analysis execution with 11 steps
+_log_step(): Step logging and progress
+_log_error(): Detailed error logging
+_ensure_utc(): Timezone normalization
+
+
+Calculation Methods:
+
+_calculate_metrics(): Computes all ATR metrics
+_calculate_atr(): ATR calculation
+_get_price_at_datetime(): Price retrieval
+
+
+Formatting Methods:
+
+_format_hvn_result(): HVN result formatting
+_format_camarilla_result(): Camarilla formatting
+_format_weekly_zones(): Weekly zone formatting
+_format_daily_zones(): Daily zone formatting
+_format_atr_zones(): ATR zone formatting
+_format_confluence_zones(): Confluence ranking formatting
+
+
+
+/src/ui/widgets/overview_widget/ (Main UI Components)
+app_overview.py
+OverviewWidget Class:
+
+Purpose: Main container for all trading session UI elements
+Signals:
+
+save_to_database: Triggers database save
+analysis_requested: Triggers analysis
+data_changed: Data modification signal
+fetch_market_data: Market data request
+
+
+Core Methods:
+
+_init_ui(): Creates complete UI layout
+_connect_signals(): Connects internal signals
+_on_ticker_changed(): Ticker change handler
+_fetch_market_data(): Market data fetch trigger
+_on_query_zone_data(): M15 zone data query from Polygon
+_on_run_analysis(): Analysis trigger
+_on_save_to_database(): Database save trigger
+_on_clear_all(): Clear all data
+
+
+Data Methods:
+
+collect_session_data(): Gathers all UI data
+load_session_data(): Loads session into UI
+update_calculations(): Updates calculation displays
+store_confluence_results(): Stores analysis results
+clear_all(): Clears all fields
+
+
+
+session_info.py
+SessionInfoFrame Class:
+
+Purpose: Top bar with ticker, date/time, and action buttons
+Components: ticker_input, live_toggle, date_input, time_input
+Buttons: fetch_data_btn, run_analysis_btn, clear_all_btn, save_to_db_btn
+Signal: ticker_changed
+
+analysis_frames.py
+WeeklyAnalysisFrame Class:
+
+Components: trend selectors, position structure, EOW bias, price levels (WL1-WL4), notes
+Methods: get_data(), clear_all()
+
+DailyAnalysisFrame Class:
+
+Components: trend selectors, position structure, EOD bias, price levels (L1-L6), notes
+Methods: get_data(), clear_all()
+
+metrics_frame.py
+MetricsFrame Class:
+
+Purpose: Displays calculated ATR metrics and price levels
+Fields: atr_5min, atr_2hour, atr_15min, daily_atr, current_price, open_price, atr_high, atr_low
+Methods: update_metrics(), clear_all()
+
+zone_table.py
+M15ZoneTable Class:
+
+Purpose: 6-row table for M15 zone data entry
+Columns: Zone number, Date, Time (UTC), Level, Zone High, Zone Low
+Methods:
+
+get_zone_data(): Retrieves all zone data
+set_zone_data(): Sets data for specific row
+clear_zone_data(): Clears specific row
+clear_all_zones(): Clears entire table
+validate_zone_times(): Validates UTC time format
+get_valid_zone_count(): Counts valid zones
+
+
+
+calculations.py
+CalculationsDisplay Class:
+
+Purpose: Grid of calculation result displays
+Displays:
+
+Row 1: HVN 7-day, 14-day, 30-day
+Row 2: Monthly, Weekly, Daily Camarilla
+Row 3: Weekly Zones, Daily Zones, ATR Zones
+
+
+Methods: _create_calc_display(), clear_all()
+
+components.py
+TrendSelector Class:
+
+Purpose: Combo box with color-coded trend options (Bull/Bear/Range)
+Method: _update_style(): Updates colors based on selection
+
+SectionHeader Class:
+
+Purpose: Styled section header label
+
+
+Calculations Layer (/src/calculations/)
+Volume Analysis (/src/calculations/volume/)
+
+hvn_engine.py: High Volume Node analysis engine
+volume_profile.py: Volume profile calculations
+hvn_confluence.py: HVN confluence calculator
+
+Pivot Analysis (/src/calculations/pivots/)
+
+camarilla_engine.py: Camarilla pivot calculations
+camarilla_confluence.py: Camarilla confluence analysis
+
+Zone Calculations (/src/calculations/zones/)
+
+weekly_zone_calc.py: Weekly zone calculations using 2-hour ATR
+daily_zone_calc.py: Daily zone calculations using 15-minute ATR
+atr_zone_calc.py: ATR-based dynamic zone calculations
+
+Candlestick Analysis (/src/calculations/candlestick/)
+
+m15_zone_calc.py: M15 candle data fetching and zone calculations
+
+Confluence Analysis (/src/calculations/confluence/)
+
+confluence_engine.py: Main confluence calculation engine combining all inputs
+hvn_confluence.py: HVN-specific confluence calculations
+camarilla_confluence.py: Camarilla-specific confluence calculations
+
+
+Data Flow Summary
+
+User Input → OverviewWidget collects ticker, date/time, analysis parameters
+Market Data Fetch → PolygonService → PolygonBridge → Polygon REST API
+Analysis Execution → AnalysisThread orchestrates all calculations:
+
+HVN analysis (7-day, 14-day, 30-day)
+Camarilla pivots (daily, weekly, monthly)
+Zone calculations (weekly, daily, ATR)
+Confluence analysis combining all inputs
+
+
+Results Display → CalculationsDisplay widgets show formatted results
+Database Save → DatabaseService → SupabaseClient → Supabase database
+Session Load → SessionPickerDialog → DatabaseService → UI population
+
+
+Key Integration Points
+
+Qt Signals: Connect UI events to service operations
+Threading: AnalysisThread and PolygonDataWorker prevent UI blocking
+Data Models: TradingSession is the central data container
+Validation: Multi-level validation from UI to database
+Timezone Handling: All times handled in UTC internally
+Error Handling: Comprehensive logging and user feedback
+
+
+External Dependencies
+
+PyQt6: GUI framework
+Pandas: Data manipulation
+NumPy: Numerical calculations
+Supabase: Database client
+Polygon REST API: Market data (via local server on port 8200)
+Python-dotenv: Environment variable management

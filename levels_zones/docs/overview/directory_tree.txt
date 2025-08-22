@@ -1,0 +1,79 @@
+levels_zones/
+├── .gitignore
+├── README.md
+├── config.py
+├── confluence_analyzer.py
+├── main.py
+├── polygon_diagnostic.log
+├── setup.py
+├── calculations/
+│   ├── __init__.py
+│   ├── candlestick/
+│   │   ├── __init__.py
+│   │   └── m15_zone_calc.py
+│   ├── confluence/
+│   │   ├── camarilla_confluence.py
+│   │   ├── confluence_engine.py
+│   │   └── hvn_confluence.py
+│   ├── pivots/
+│   │   └── camarilla_engine.py
+│   ├── volume/
+│   │   ├── cluster_analyzer.py
+│   │   ├── hvn_engine.py
+│   │   └── volume_profile.py
+│   └── zones/
+│       ├── __init__.py
+│       ├── atr_zone_calc.py
+│       ├── daily_zone_calc.py
+│       └── weekly_zone_calc.py
+├── docs/
+│   ├── data/
+│   │   └── test_data.txt
+│   └── overview/
+│       ├── calculations.txt
+│       ├── main.txt
+│       └── src.txt
+├── src/
+│   ├── __init__.py
+│   ├── data/
+│   │   ├── __init__.py
+│   │   ├── models.py
+│   │   ├── polygon_bridge.py
+│   │   ├── supabase_client.py
+│   │   └── validators.py
+│   ├── services/
+│   │   ├── database_service.py
+│   │   └── polygon_service.py
+│   ├── ui/
+│   │   ├── __init__.py
+│   │   ├── app_window.py
+│   │   ├── dark_theme.py
+│   │   ├── dialogs/
+│   │   │   ├── __init__.py
+│   │   │   └── session_picker_dialog.py
+│   │   ├── main_window/
+│   │   │   ├── __init__.py
+│   │   │   ├── database_handlers.py
+│   │   │   ├── menu_manager.py
+│   │   │   ├── signal_handlers.py
+│   │   │   └── window_helpers.py
+│   │   ├── threads/
+│   │   │   ├── __init__.py
+│   │   │   └── analysis_modules/
+│   │   │       └── __init__.py
+│   │   │   └── analysis_thread.py
+│   │   └── widgets/
+│   │       ├── __init__.py
+│   │       └── overview_widget/
+│   │           ├── __init__.py
+│   │           ├── analysis_frames.py
+│   │           ├── app_overview.py
+│   │           ├── calculations.py
+│   │           ├── components.py
+│   │           ├── metrics_frame.py
+│   │           ├── session_info.py
+│   │           └── zone_table.py
+│   └── utils/
+│       └── __init__.py
+└── tests/
+    └── __init__.py

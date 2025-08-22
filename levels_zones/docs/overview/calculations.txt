@@ -1,0 +1,461 @@
+/calculations/ - Core Calculation Engines
+/calculations/__init__.py
+
+Purpose: Package initialization for calculation modules
+Exports: Makes all calculation submodules available
+
+
+/calculations/candlestick/ - Candlestick Analysis
+/calculations/candlestick/__init__.py
+
+Purpose: Candlestick calculation package initialization
+
+/calculations/candlestick/m15_zone_calc.py
+Module: M15 Zone Calculator
+Purpose: Fetches and calculates 15-minute candlestick data for specific zone datetime coordinates
+Class: M15ZoneCalculator
+
+Dependencies: PolygonBridge for data fetching
+
+Key Functions:
+
+__init__(): Initializes calculator with PolygonBridge connection
+test_connection(): Tests Polygon API connectivity
+
+Returns: Tuple[bool, str] - success status and message
+
+
+fetch_candle_for_zone(ticker, zone_date, zone_time): Retrieves M15 candle data for specific datetime
+
+Inputs: ticker (str), zone_date (YYYY-MM-DD), zone_time (HH:MM:SS UTC)
+Returns: Dict with high, low, mid, open, close, volume, timestamps
+Fallback Methods:
+
+Direct date range approach with buffer days
+get_candle_at_datetime method if available
+Price estimation using 0.15% spread
+
+
+
+
+fetch_all_zone_candles(ticker, zones): Batch fetches candles for multiple zones
+
+Inputs: ticker, list of zone dictionaries with date/time keys
+Returns: List of tuples (zone_index, candle_data)
+Features: Skips empty zones, handles UTC suffix, logs fetch status
+
+
+
+
+/calculations/confluence/ - Confluence Analysis
+/calculations/confluence/camarilla_confluence.py
+Module: Camarilla Confluence Calculator
+Purpose: Identifies where multiple timeframe Camarilla pivots align
+Data Classes:
+
+CamarillaConfluenceZone: Represents aligned pivot zones
+
+Attributes: zone_id, center_price, zone_high/low, zone_width, zone_type (resistance/support/mixed), timeframes, pivots, strength metrics
+Methods: contains_price(), is_resistance(), is_support()
+
+
+CamarillaConfluenceAnalysis: Complete analysis results
+
+Attributes: current_price, zones, resistance/support zones, strongest_zone, nearest levels
+Methods: get_zones_by_distance(), get_zones_by_strength(), get_nearest_levels()
+
+
+
+Class: CamarillaConfluenceCalculator
+
+Configuration: confluence_threshold_percent, min_pivots_for_zone, timeframe_weights
+
+Key Functions:
+
+calculate(results, current_price, max_zones): Main analysis function
+
+Inputs: Dict of timeframe->CamarillaResult, current price, max zones to return
+Returns: CamarillaConfluenceAnalysis with identified zones
+Process: Collects pivots → identifies zones → calculates metrics → classifies strength
+
+
+_calculate_strength_score(zone): Scores zone based on multiple factors
+
+Scoring Factors: Number of timeframes (0-4 pts), total strength (0-4 pts), zone tightness (0-2 pts), level type bonus, timeframe weights
+Returns: Numerical strength score
+
+
+format_zone_summary(zone, current_price): Creates readable zone summary
+get_zone_summary_dict(zone): Returns zone data as dictionary
+
+/calculations/confluence/confluence_engine.py
+Module: Main Confluence Engine
+Purpose: Calculates confluence scores for M15 zones against all technical levels
+Enums:
+
+SourceType: Types of confluence inputs (HVN, Camarilla, Daily/Weekly zones, ATR, Reference prices)
+ConfluenceLevel: L1-L5 ranking system
+
+Data Classes:
+
+ConfluenceInput: Single confluence input from any source
+
+Attributes: price, source_type, level_name, weight, zone boundaries, is_zone flag
+
+
+M15ZoneScore: Confluence scoring for single M15 zone
+
+Attributes: zone_number, boundaries, confluence_count, confluent_inputs, level, score
+Methods: contains_price(), overlaps_zone(), add_confluence()
+
+
+ConfluenceResult: Complete analysis results
+
+Methods: get_ranked_zones(), get_zones_by_level()
+
+
+
+Class: ConfluenceEngine
+
+Balanced Weight System:
+
+Major structural (2.5-3.0): Monthly Camarilla, 30-day HVN
+Important swing (1.5-2.0): Weekly zones, Weekly Camarilla, 14-day HVN
+Intraday context (0.5-1.0): Daily zones, ATR zones, 7-day HVN
+Minor levels (0.1-0.3): Daily levels, ATR levels, Daily Camarilla
+
+
+
+Key Functions:
+
+calculate_confluence(): Main confluence calculation
+
+Inputs: M15 zones, HVN results, Camarilla results, daily levels, weekly/daily/ATR zones, metrics
+Returns: ConfluenceResult with scored zones
+Zone overlap multiplier: 1.5x weight for overlapping zones
+
+
+_collect_*_inputs(): Family of input collectors for each source type
+
+Handles weekly zones, daily zones, ATR zones, HVN peaks, Camarilla pivots, daily levels, metrics
+
+
+format_confluence_result(): Creates formatted display output
+
+Features: Star ratings, directional indicators, source breakdowns, zone overlap indicators
+
+
+
+/calculations/confluence/hvn_confluence.py
+Module: HVN Confluence Calculator
+Purpose: Identifies confluence zones where multiple timeframe volume peaks align
+Data Classes:
+
+ConfluenceZone: Zone where peaks align
+
+Attributes: zone_id, center_price, boundaries, timeframes, peaks, volume weights, distance metrics, strength classification
+
+
+ConfluenceAnalysis: Complete HVN confluence analysis
+
+Methods: get_zones_by_distance(), get_zones_by_strength()
+
+
+
+Class: HVNConfluenceCalculator
+
+15-Day Priority System: Strongly favors shorter timeframes for trending stocks
+Recency bias: Applied to prioritize recent data
+Timeframe weights: 15-day (1.5), 60-day (0.8), 120-day (0.5)
+
+Key Functions:
+
+calculate(results, current_price, max_zones): Main analysis
+
+Process: Collects peaks → identifies zones → calculates metrics → creates analysis
+
+
+_identify_zones(): Zone identification with 15-day priority
+
+Process: Processes peaks by timeframe priority (15, 60, 120)
+Validation: Requires 15-day peak OR multiple timeframes OR high volume
+
+
+_calculate_strength_score(): Scoring with maximum weight approach
+
+Uses maximum timeframe weight instead of average
+Bonus points for 15-day peaks
+
+
+
+
+/calculations/pivots/ - Pivot Point Calculations
+/calculations/pivots/camarilla_engine.py
+Module: Camarilla Pivot Calculator
+Purpose: Calculates Camarilla pivot points optimized for Polygon aggregated bars
+Data Classes:
+
+CamarillaPivot: Single pivot level
+
+Attributes: level_name, price, strength (1-6), timeframe
+
+
+CamarillaResult: Complete pivot calculation
+
+Attributes: timeframe, OHLC values, pivots list, range_type, central_pivot
+
+
+
+Class: CamarillaEngine
+
+US market holidays: Hardcoded list for trading day calculations
+Polygon integration: Direct API support for aggregated bars
+
+Key Functions:
+
+fetch_aggregated_data(ticker, timeframe, analysis_date): Gets data from Polygon
+
+Timeframes: daily (5 days), weekly (8 weeks), monthly (6 months)
+Returns: DataFrame with aggregated OHLC data
+
+
+calculate_from_data(data, timeframe): Calculates pivots from OHLC
+
+Daily handling: Special logic for intraday vs daily bars
+Calculations: R1-R6 resistance, S1-S6 support levels
+Range classification: higher/lower/neutral based on close vs pivot
+
+
+_get_prior_trading_day(current_date): Skips weekends and holidays
+
+
+/calculations/volume/ - Volume Analysis
+/calculations/volume/cluster_analyzer.py
+
+Note: Empty file, placeholder for future cluster analysis
+
+/calculations/volume/hvn_engine.py
+Module: HVN Peak Detection Engine
+Purpose: Identifies volume peaks in price profiles across multiple timeframes
+Data Classes:
+
+HVNCluster: Container for HVN cluster information
+
+Attributes: levels, cluster boundaries, center_price, volumes, highest_volume_level
+
+
+HVNResult: Complete HVN analysis
+
+Attributes: hvn_unit, price_range, clusters, ranked_levels, filtered_levels
+
+
+VolumePeak: Single peak information
+
+Attributes: price, rank, volume_percent, level_index
+
+
+TimeframeResult: Analysis for single timeframe
+
+Attributes: timeframe_days, price_range, total_levels, peaks, data_points
+
+
+
+Class: HVNEngine
+
+Configuration: levels (100), percentile_threshold (80), prominence_threshold (0.5), min_peak_distance (3)
+
+Key Functions:
+
+analyze(data, include_pre, include_post): Complete HVN analysis
+
+Returns: HVNResult with clusters, ranked and filtered levels
+
+
+identify_volume_peaks(levels, percentile_filter): Finds local peaks
+
+Uses: scipy.signal.find_peaks with prominence and distance filters
+
+
+analyze_multi_timeframe(data, timeframes): Multi-timeframe analysis
+
+Default timeframes: 120, 60, 15 days
+Returns: Dictionary mapping timeframe to TimeframeResult
+
+
+rank_levels(levels): Ranks 1-100 based on volume percentage
+identify_contiguous_clusters(): Groups adjacent high-volume levels
+calculate_volume_trend(): Analyzes volume trend approaching levels
+
+Output Methods:
+
+get_all_peaks_dataframe(): Converts to pandas DataFrame
+get_peaks_summary(): Clean dictionary summary
+print_results(): Formatted console output
+
+/calculations/volume/volume_profile.py
+Module: Volume Profile Calculation
+Purpose: Aggregates volume by price levels for HVN analysis
+Data Class:
+
+PriceLevel: Container for price level information
+
+Attributes: index, low/high boundaries, center, volume, percent_of_total
+
+
+
+Class: VolumeProfile
+
+Market hours (UTC): Pre-market (08:00-13:30), Regular (13:30-20:00), Post-market (20:00-24:00)
+Performance target: Process 14 days of 1-min data in <1 second
+
+Key Functions:
+
+build_volume_profile(data, include_pre, include_post): Main profile builder
+
+Process: Filters market hours → calculates price levels → aggregates volume → creates PriceLevel objects
+Volume distribution: Spreads bar volume evenly across touched price levels
+
+
+calculate_price_levels(high, low): Creates price level boundaries
+
+Returns: numpy array of boundaries and hvn_unit size
+
+
+is_market_hours(timestamp, include_pre, include_post): Market hours filter
+get_level_by_price(price): Finds level containing given price
+get_top_levels(n): Returns top N levels by volume
+get_levels_above_threshold(threshold): Filters by volume percentage
+
+
+/calculations/zones/ - Zone Calculations
+/calculations/zones/__init__.py
+
+Exports: WeeklyZoneCalculator, DailyZoneCalculator, ATRZoneCalculator
+
+/calculations/zones/atr_zone_calc.py
+Module: ATR Zone Calculator
+Purpose: Creates dynamic volatility-based zones using ATR levels and 5-minute ATR bands
+Class: ATRZoneCalculator
+Key Functions:
+
+create_atr_zones(atr_high, atr_low, atr_5min, current_price): Creates zones from ATR levels
+
+Creates: ATR High Zone (resistance), ATR Low Zone (support)
+Zone width: 5-minute ATR above and below level
+Returns: List of zone dictionaries with boundaries, type, distance metrics
+
+
+calculate_zones_from_session(session_data, ticker, analysis_datetime): Session-based calculation
+
+Extracts: daily_atr, atr_5min from metrics
+Calculates: ATR high/low levels (current ± daily ATR)
+Returns: Complete zone analysis with resistance/support classification
+
+
+format_zones_for_display(zone_result): UI formatting
+get_zones_for_confluence(zone_result): Prepares for confluence engine
+
+/calculations/zones/daily_zone_calc.py
+Module: Daily Zone Calculator
+Purpose: Transforms daily levels (DL1-DL6) into zones using 5-minute ATR bands
+Class: DailyZoneCalculator
+
+Zone structure: 5 minutes above and below each level (10min total zone)
+
+Key Functions:
+
+calculate_5min_atr(ticker, analysis_date, period): Calculates 5-minute ATR
+
+Data requirements: 14 periods minimum
+Fallback chain: Native 5min bars → Extended date range → Reduced period
+Emergency fallback: 3.3% of daily ATR or 0.1% of price level
+
+
+create_daily_zones(daily_levels, atr_5min, multiplier): Zone creation
+
+Creates: Zones for DL1-DL6 levels
+Zone width: 10 minutes total (5min above + 5min below)
+Returns: List with boundaries, ATR used, center prices
+
+
+calculate_zones_from_session(): Session-based processing
+
+Extracts: 6 daily price levels from session data
+Classifies: Resistance (above current) vs Support (below current)
+Sorts: By distance from current price
+
+
+
+/calculations/zones/weekly_zone_calc.py
+Module: Weekly Zone Calculator
+Purpose: Transforms weekly levels (WL1-WL4) into zones using 1-hour ATR bands
+Class: WeeklyZoneCalculator
+
+Zone structure: 30 minutes above and below each level (~1hr total)
+
+Key Functions:
+
+calculate_1hour_atr(ticker, analysis_date, period): Calculates 1-hour ATR
+
+Attempts: Native 1-hour bars → 15-min resampling → 5-min resampling
+Resampling: Aggregates shorter timeframes to 1-hour OHLC
+Fallback: 15% of daily ATR if calculation fails
+
+
+create_weekly_zones(weekly_levels, atr_1hour, multiplier): Zone creation
+
+Default multiplier: 0.5 (creates 30min above/below zones)
+Zone width: Approximately 1-hour ATR total
+Returns: Zones with boundaries, ATR details, center prices
+
+
+calculate_zones_from_session(): Session processing
+
+Extracts: 4 weekly price levels (WL1-WL4)
+Classification: Based on position relative to current price
+Output: Complete zone analysis with distance metrics
+
+
+
+
+Common Patterns and Data Flow
+Data Sources Integration
+
+Polygon Bridge: Primary data source for all candlestick and ATR calculations
+Session Data: Contains pre-calculated levels, metrics, and prices
+Multiple Timeframes: Daily, Weekly, Monthly analysis with different ATR periods
+
+Zone Creation Methodology
+
+Daily Zones: 5-minute ATR bands (10min total width)
+Weekly Zones: 30-minute bands using 1-hour ATR (~1hr total)
+ATR Zones: Daily ATR ± 5-minute ATR for dynamic volatility zones
+M15 Zones: Direct candlestick data for specific 15-minute periods
+
+Confluence Scoring System
+
+Weight Hierarchy: Monthly/Long-term > Weekly/Swing > Daily/Intraday > Minor levels
+Zone Overlaps: 1.5x weight multiplier for overlapping zones
+Scoring Thresholds: L5 (12+), L4 (8-12), L3 (5-8), L2 (2.5-5), L1 (<2.5)
+Directional Bias: Zones near current price receive 1.15-1.3x multiplier
+
+Output Formats
+
+Zone Dictionaries: Standard format with name, level, high, low, type, distance metrics
+Confluence Results: Ranked zones with source breakdowns and visual indicators
+Display Formatting: Human-readable with symbols, percentages, and directional indicators
+Integration Format: Standardized dictionaries for confluence engine consumption
+
+Error Handling Strategy
+
+Connection Testing: All calculators include test_connection() methods
+Fallback Chains: Multiple data source attempts with graceful degradation
+Logging: Comprehensive logging at INFO, WARNING, ERROR levels
+Default Values: Sensible defaults when calculations fail
+
+Performance Considerations
+
+Volume Profile: Targets <1 second for 14 days of 1-minute data
+HVN Analysis: Complete multi-timeframe analysis in <3 seconds
+Caching: PolygonBridge handles data caching
+Batch Processing: Zone calculators support batch operations

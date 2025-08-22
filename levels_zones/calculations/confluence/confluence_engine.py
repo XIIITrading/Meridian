@@ -195,24 +195,24 @@ class ConfluenceEngine:
         
         # Balanced scoring weights for different sources
         self.source_weights = {
-            # Major structural levels (2.5-3.0) - Important but not overwhelming
-            SourceType.CAMARILLA_MONTHLY: 3.0,   # Reduced from 10.0
-            SourceType.HVN_30DAY: 2.5,           # Reduced from 8.0
+            # Major structural levels (4.0-5.0) - Important but not overwhelming
+            SourceType.CAMARILLA_MONTHLY: 4.0,   # Reduced from 10.0
+            SourceType.HVN_30DAY: 5.0,           # Reduced from 8.0
             
-            # Important swing levels (1.5-2.0) - Solid secondary confirmation  
-            SourceType.WEEKLY_ZONES: 2.0,        # Reduced from 5.0
-            SourceType.CAMARILLA_WEEKLY: 1.8,    # Reduced from 4.5
-            SourceType.HVN_14DAY: 1.5,           # Reduced from 4.0
+            # Important swing levels (2.5-3.0) - Solid secondary confirmation  
+            SourceType.WEEKLY_ZONES: 3.0,        # Reduced from 5.0
+            SourceType.CAMARILLA_WEEKLY: 2.0,    # Reduced from 4.5
+            SourceType.HVN_14DAY: 2.5,           # Reduced from 4.0
             
             # Intraday context (0.5-1.0) - Minor supporting levels
-            SourceType.DAILY_ZONES: 1.0,         # Reduced from 2.5
+            SourceType.DAILY_ZONES: 1.5,         # Reduced from 2.5
             SourceType.ATR_ZONES: 0.8,           # Reduced from 2.0
-            SourceType.HVN_7DAY: 0.6,            # Reduced from 1.5
+            SourceType.HVN_7DAY: 1.0,            # Reduced from 1.5
             
             # Minor levels (0.1-0.3) - Minimal weight
-            SourceType.DAILY_LEVELS: 0.3,        # Reduced from 1.0
-            SourceType.ATR_LEVELS: 0.3,          # Reduced from 1.0
-            SourceType.CAMARILLA_DAILY: 0.2,     # Reduced from 0.5
+            SourceType.DAILY_LEVELS: 1.0,        # Reduced from 1.0
+            SourceType.ATR_LEVELS: 0.8,          # Reduced from 1.0
+            SourceType.CAMARILLA_DAILY: 0.8,     # Reduced from 0.5
             SourceType.REFERENCE_PRICES: 0.1     # Reduced from 0.25
         }
         

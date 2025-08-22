@@ -26,6 +26,7 @@ from .analysis_frames import WeeklyAnalysisFrame, DailyAnalysisFrame
 from .metrics_frame import MetricsFrame
 from .zone_table import M15ZoneTable
 from .calculations import CalculationsDisplay
+from .m15_confluence_widget import M15ConfluenceWidget  # NEW IMPORT
 
 logger = logging.getLogger(__name__)
 
@@ -70,7 +71,7 @@ class OverviewWidget(QWidget):
         self.session_info.run_analysis_btn.clicked.connect(self._on_run_analysis)
         self.session_info.fetch_data_btn.clicked.connect(self._fetch_market_data)
         self.session_info.save_to_db_btn.clicked.connect(self._on_save_to_database)
-        self.session_info.clear_all_btn.clicked.connect(self._on_clear_all)  # NEW CONNECTION
+        self.session_info.clear_all_btn.clicked.connect(self._on_clear_all)
         container_layout.addWidget(self.session_info)
         
         # Metrics section
@@ -143,40 +144,14 @@ class OverviewWidget(QWidget):
         # Add the zone table
         self.zone_table = M15ZoneTable()
         container_layout.addWidget(self.zone_table)
+
+        # M15 Confluence Ranking Table (REPLACED TEXT WIDGET WITH TABLE)
+        self.m15_confluence = M15ConfluenceWidget()
+        container_layout.addWidget(self.m15_confluence)
         
         # Calculations section
         self.calculations = CalculationsDisplay()
         container_layout.addWidget(self.calculations)
-        
-        # M15 Zones Ranked section
-        zones_ranked_label = QLabel("M15 Zones Ranked")
-        zones_ranked_label.setStyleSheet(f"""
-            QLabel {{
-                background-color: {DarkTheme.BG_DARK};
-                color: {DarkTheme.TEXT_PRIMARY};
-                padding: 8px;
-                font-weight: bold;
-                font-size: 14px;
-                border: 1px solid {DarkTheme.BORDER_NORMAL};
-                border-radius: 3px;
-            }}
-        """)
-        zones_ranked_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        container_layout.addWidget(zones_ranked_label)
-
-        self.zones_ranked = QTextEdit()
-        # Apply larger font size to zones ranked text area
-        zones_ranked_style = DarkStyleSheets.TEXT_AREA + """
-            QTextEdit {
-                font-size: 14px;
-                line-height: 1.4;
-            }
-        """
-        self.zones_ranked.setStyleSheet(zones_ranked_style)
-        self.zones_ranked.setPlaceholderText("M15 Zones Confluence Ranking will appear here after analysis...")
-        self.zones_ranked.setMinimumHeight(200)
-        self.zones_ranked.setReadOnly(True)
-        container_layout.addWidget(self.zones_ranked)
         
         # Add stretch at bottom
         container_layout.addStretch()
@@ -507,14 +482,12 @@ class OverviewWidget(QWidget):
         """Validate data and trigger save (called from main window)"""
         self._on_save_to_database()
     
-    # Add this method to store results when analysis completes
     def store_confluence_results(self, results: Dict[str, Any]):
         """Store raw confluence results from analysis"""
         if 'confluence_results' in results:
             self._confluence_results = results['confluence_results']
             logger.debug(f"Stored raw confluence results")
     
-    # Update collect_session_data method - replace the confluence capture section:
     def collect_session_data(self) -> Dict[str, Any]:
         """Collect all session data from the widget with debugging"""
         logger.debug("Starting data collection...")
@@ -589,20 +562,13 @@ class OverviewWidget(QWidget):
             'timestamp': datetime.now()
         }
         
-        # Capture confluence results if analysis has been run
-        confluence_text = self.zones_ranked.toPlainText()
-        if confluence_text and confluence_text != "M15 Zones Confluence Ranking will appear here after analysis...":
-            session_data['confluence_text'] = confluence_text
-            logger.debug(f"Confluence text captured: {len(confluence_text)} characters")
-            logger.debug(f"Confluence text type: {type(confluence_text)}")  # Debug logging
-            
-            # Also capture raw confluence results if available
-            if hasattr(self, '_confluence_results') and self._confluence_results:
-                session_data['confluence_results'] = self._confluence_results
-                logger.debug(f"Raw confluence results captured")
-                logger.debug(f"Confluence results type: {type(self._confluence_results)}")  # Debug logging
+        # Capture raw confluence results if available
+        if hasattr(self, '_confluence_results') and self._confluence_results:
+            session_data['confluence_results'] = self._confluence_results
+            logger.debug(f"Raw confluence results captured")
+            logger.debug(f"Confluence results type: {type(self._confluence_results)}")
         else:
-            logger.debug("No confluence results to capture (analysis not run or placeholder text)")
+            logger.debug("No confluence results to capture (analysis not run)")
         
         logger.debug("Data collection complete")
         return session_data
@@ -770,9 +736,13 @@ class OverviewWidget(QWidget):
                 "These will be calculated during analysis."
             )
         
-        # Update zones ranking
-        if 'zones_ranked' in results:
-            self.zones_ranked.setText(results['zones_ranked'])
+        # UPDATE M15 CONFLUENCE TABLE INSTEAD OF TEXT
+        if 'confluence_results' in results:
+            current_price = results.get('current_price', 0)
+            self.m15_confluence.update_confluence_data(
+                results['confluence_results'], 
+                current_price
+            )
     
     def clear_all(self):
         """Clear all input fields and results"""
@@ -808,8 +778,8 @@ class OverviewWidget(QWidget):
         self.calculations.daily_zones.text_area.clear()
         self.calculations.atr_zones.text_area.clear()
         
-        # Clear zones ranked
-        self.zones_ranked.clear()
+        # CLEAR M15 CONFLUENCE TABLE
+        self.m15_confluence.clear_data()
         
         # Reset placeholders for HVN
         self.calculations.hvn_7day.text_area.setPlaceholderText("HVN 7-day analysis will appear here...")
@@ -830,9 +800,6 @@ class OverviewWidget(QWidget):
             "• ATR High: Current + Daily ATR ± 5min ATR\n"
             "• ATR Low: Current - Daily ATR ± 5min ATR"
         )
-        
-        # Reset zones ranked placeholder
-        self.zones_ranked.setPlaceholderText("M15 Zones Confluence Ranking will appear here after analysis...")
         
         # Emit data changed signal to reset the modified flag
         self.data_changed.emit()

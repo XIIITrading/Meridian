@@ -15,6 +15,7 @@ from data.polygon_bridge import PolygonBridge
 from calculations.volume.hvn_engine import HVNEngine, TimeframeResult
 from calculations.volume.volume_profile import VolumeProfile
 from calculations.confluence.hvn_confluence import HVNConfluenceCalculator
+from calculations.zones.market_structure_zones import MarketStructureZoneCalculator
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +34,7 @@ class PolygonDataWorker(QThread):
         self.params = params
         self.bridge = PolygonBridge()
         self.hvn_engine = HVNEngine(levels=100)
+        self.market_structure_calc = MarketStructureZoneCalculator()
         
     def run(self):
         """Execute the requested operation"""
@@ -48,7 +50,7 @@ class PolygonDataWorker(QThread):
             self.error.emit(str(e))
 
     def _fetch_and_calculate(self):
-        """Fetch all data and calculate metrics"""
+        """Fetch all data and calculate metrics - OPTIMIZED VERSION"""
         ticker = self.params['ticker']
         session_datetime = self.params['datetime']
         
@@ -62,7 +64,11 @@ class PolygonDataWorker(QThread):
         # Calculate date ranges
         session_date = session_datetime.date()
         end_date = session_date
-        start_date = end_date - timedelta(days=30)  # Get 30 days for calculations
+        
+        # OPTIMIZED: Different date ranges for different needs
+        start_date_market_structure = end_date - timedelta(days=3)  # 3 days for market structure
+        start_date_atr = end_date - timedelta(days=10)  # 10 days for ATR calculations
+        start_date_daily = end_date - timedelta(days=30)  # Keep 30 days for daily ATR
         
         results = {
             'ticker': ticker,
@@ -71,20 +77,20 @@ class PolygonDataWorker(QThread):
         }
         
         try:
-            # Fetch 5-minute data
+            # Fetch 5-minute data - OPTIMIZED to 10 days (enough for ATR)
             self.progress.emit(20, "Fetching 5-minute data...")
             data_5min = self.bridge.get_historical_bars(
                 ticker=ticker,
-                start_date=start_date,
+                start_date=start_date_atr,  # 10 days instead of 30
                 end_date=end_date,
                 timeframe='5min'  # Native 5-minute bars
             )
             
-            # Fetch 15-minute data DIRECTLY from Polygon
+            # Fetch 15-minute data - OPTIMIZED to 10 days
             self.progress.emit(30, "Fetching 15-minute data...")
             data_15min = self.bridge.get_historical_bars(
                 ticker=ticker,
-                start_date=start_date,
+                start_date=start_date_atr,  # 10 days instead of 30
                 end_date=end_date,
                 timeframe='15min'  # Native 15-minute bars
             )
@@ -130,9 +136,48 @@ class PolygonDataWorker(QThread):
                     atr_2hour = self._calculate_atr(data_2hour, period=min(14, len(data_2hour)-1))
                     results['metrics']['atr_2hour'] = float(atr_2hour)
             
-            # Fetch daily data for daily ATR
+            # Calculate Market Structure Metrics
+            self.progress.emit(50, "Calculating market structure metrics...")
+            if not data_5min.empty:
+                try:
+                    # Filter data for market structure (only need recent 3 days)
+                    recent_data = data_5min[data_5min.index.date >= start_date_market_structure]
+                    
+                    # Ensure data has timezone for market structure calc
+                    data_5min_with_tz = recent_data.copy()
+                    if data_5min_with_tz.index.tz is None:
+                        data_5min_with_tz.index = pd.DatetimeIndex(data_5min_with_tz.index).tz_localize('UTC')
+                    
+                    # Calculate market structure metrics
+                    market_metrics = self.market_structure_calc.calculate_market_metrics(
+                        data_5min_with_tz,
+                        session_datetime
+                    )
+                    
+                    # Add to results
+                    if market_metrics:
+                        results['metrics'].update(market_metrics)
+                        logger.info(f"Market structure metrics calculated: {len(market_metrics)} values")
+                        
+                        # Log specific metrics
+                        if 'overnight_high' in market_metrics:
+                            logger.info(f"Overnight High: ${market_metrics['overnight_high']:.2f}")
+                        if 'overnight_low' in market_metrics:
+                            logger.info(f"Overnight Low: ${market_metrics['overnight_low']:.2f}")
+                        if 'prior_day_high' in market_metrics:
+                            logger.info(f"Prior Day High: ${market_metrics['prior_day_high']:.2f}")
+                        if 'prior_day_low' in market_metrics:
+                            logger.info(f"Prior Day Low: ${market_metrics['prior_day_low']:.2f}")
+                        if 'prior_day_open' in market_metrics:
+                            logger.info(f"Prior Day Open: ${market_metrics['prior_day_open']:.2f}")
+                        if 'prior_day_close' in market_metrics:
+                            logger.info(f"Prior Day Close: ${market_metrics['prior_day_close']:.2f}")
+                            
+                except Exception as e:
+                    logger.warning(f"Could not calculate market structure metrics: {e}")
+            
+            # Fetch daily data for daily ATR (keep at 30 days for accuracy)
             self.progress.emit(70, "Fetching daily data...")
-            start_date_daily = end_date - timedelta(days=30)
             data_daily = self.bridge.get_historical_bars(
                 ticker=ticker,
                 start_date=start_date_daily,
@@ -156,10 +201,16 @@ class PolygonDataWorker(QThread):
                     results['metrics']['atr_high'] = base_price + float(daily_atr)
                     results['metrics']['atr_low'] = base_price - float(daily_atr)
             
-            # Store data for HVN analysis
+            # Store data for potential HVN analysis (but not used in this flow)
             results['data_5min'] = data_5min
-            results['data_15min'] = data_15min  # Store native 15-min data
+            results['data_15min'] = data_15min
             results['data_daily'] = data_daily
+            
+            # Log summary
+            logger.info(f"Data fetch complete for {ticker}:")
+            logger.info(f"  - 5-min bars: {len(data_5min)}")
+            logger.info(f"  - 15-min bars: {len(data_15min)}")
+            logger.info(f"  - Daily bars: {len(data_daily)}")
             
             self.progress.emit(100, "Data fetch complete!")
             self.data_ready.emit(results)

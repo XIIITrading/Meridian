@@ -8,7 +8,7 @@ import logging
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QTableWidget, 
-    QTableWidgetItem, QHeaderView, QCheckBox, QPushButton
+    QTableWidgetItem, QHeaderView, QPushButton
 )
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QColor
@@ -94,41 +94,28 @@ class PivotConfluenceWidget(QWidget):
         self.setLayout(layout)
     
     def _create_pivot_table(self) -> QTableWidget:
-        """Create the pivot confluence table"""
-        # 6 rows (R6, R4, R3, S3, S4, S6), 13 columns
-        table = QTableWidget(6, 13)
+        """Create the pivot confluence table with visual indicators"""
+        # 6 rows (R6, R4, R3, S3, S4, S6), 19 columns (added PD Open and PD Close)
+        table = QTableWidget(6, 19)
         table.setStyleSheet(DarkStyleSheets.TABLE)
         
-        # Set headers
+        # Set headers - separated market structure components with PD Open and PD Close
         headers = [
             "Level", "Price", "Zone Range",
             "7-Day HVN", "14-Day HVN", "30-Day HVN",
             "Monthly Pivots", "Weekly Pivots", "Weekly Zones",
-            "Daily Zones", "ATR Zones", "Score", "Level"
+            "Daily Zones", "ATR Zones", 
+            "ON High", "ON Low", "PD High", "PD Low", "PD Open", "PD Close",  # Added PD Open and PD Close
+            "Score", "Level"
         ]
         table.setHorizontalHeaderLabels(headers)
         
-        # Set column properties
+        # Set column resize mode - all columns stretch equally
         header = table.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)  # Level
-        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)  # Price
-        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)  # Zone Range
+        header.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         
-        # Confluence checkboxes - fixed width
-        for col in range(3, 11):
-            header.setSectionResizeMode(col, QHeaderView.ResizeMode.Fixed)
-        
-        header.setSectionResizeMode(11, QHeaderView.ResizeMode.Fixed)  # Score
-        header.setSectionResizeMode(12, QHeaderView.ResizeMode.Fixed)  # Level
-        
-        table.setColumnWidth(0, 60)   # Level
-        table.setColumnWidth(1, 80)   # Price
-        table.setColumnWidth(11, 60)  # Score
-        table.setColumnWidth(12, 50)  # Level
-        
-        # Set checkbox column widths
-        for col in range(3, 11):
-            table.setColumnWidth(col, 80)
+        # Optionally set minimum widths to prevent columns from becoming too narrow
+        header.setMinimumSectionSize(35)  # Minimum width of 35 pixels per column
         
         # Hide row headers
         table.verticalHeader().setVisible(False)
@@ -146,44 +133,36 @@ class PivotConfluenceWidget(QWidget):
             level_item.setFlags(level_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             table.setItem(row, 0, level_item)
             
-            # Price (read-only, will be populated by analysis)
+            # Price (read-only)
             price_item = QTableWidgetItem("")
             price_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
             price_item.setFlags(price_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             table.setItem(row, 1, price_item)
             
-            # Zone Range (read-only, will be populated by analysis)
+            # Zone Range (read-only)
             range_item = QTableWidgetItem("")
             range_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
             range_item.setFlags(range_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             table.setItem(row, 2, range_item)
             
+            # Confluence indicator cells (columns 3-16)
+            for col in range(3, 17):
+                indicator_item = QTableWidgetItem("")
+                indicator_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                indicator_item.setFlags(indicator_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                table.setItem(row, col, indicator_item)
+            
             # Score (read-only)
             score_item = QTableWidgetItem("0")
             score_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
             score_item.setFlags(score_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-            table.setItem(row, 11, score_item)
+            table.setItem(row, 17, score_item)
             
             # Level designation (read-only)
             level_item = QTableWidgetItem("L1")
             level_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
             level_item.setFlags(level_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-            table.setItem(row, 12, level_item)
-            
-            # Create checkboxes for confluence sources (columns 3-10)
-            for col in range(3, 11):
-                checkbox_widget = QWidget()
-                checkbox_layout = QHBoxLayout(checkbox_widget)
-                checkbox_layout.setContentsMargins(0, 0, 0, 0)
-                checkbox_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                
-                checkbox = QCheckBox()
-                checkbox.setChecked(True)  # Default to checked
-                checkbox.setStyleSheet(DarkStyleSheets.CHECKBOX)
-                checkbox.stateChanged.connect(self.confluence_settings_changed.emit)
-                
-                checkbox_layout.addWidget(checkbox)
-                table.setCellWidget(row, col, checkbox_widget)
+            table.setItem(row, 18, level_item)
         
         # Set table height for exactly 6 rows
         table.verticalHeader().setDefaultSectionSize(35)
@@ -194,13 +173,34 @@ class PivotConfluenceWidget(QWidget):
         return table
     
     def update_pivot_data(self, pivot_confluence_results):
-        """Update the table with pivot confluence results"""
+        """Update the table with pivot confluence results and visual indicators"""
         if not pivot_confluence_results or not hasattr(pivot_confluence_results, 'pivot_zones'):
             logger.warning("No pivot confluence results to display")
             return
         
         # Store the data
         self.pivot_zones_data = pivot_confluence_results.pivot_zones
+        
+        # Clear all confluence indicators first
+        self._clear_confluence_indicators()
+        
+        # Map confluence sources to column indices - separated market structure with PD Open/Close
+        source_to_col = {
+            'hvn_7day': 3,
+            'hvn_14day': 4,
+            'hvn_30day': 5,
+            'monthly_pivots': 6,
+            'weekly_pivots': 7,
+            'weekly_zones': 8,
+            'daily_zones': 9,
+            'atr_zones': 10,
+            'overnight_high': 11,  # Separated market structure
+            'overnight_low': 12,
+            'prior_day_high': 13,
+            'prior_day_low': 14,
+            'prior_day_open': 15,   # Added
+            'prior_day_close': 16,  # Added
+        }
         
         # Update table with results
         level_order = ['R6', 'R4', 'R3', 'S3', 'S4', 'S6']
@@ -213,19 +213,22 @@ class PivotConfluenceWidget(QWidget):
                 # Update price
                 self.pivot_table.item(row, 1).setText(f"${zone.pivot_price:.2f}")
                 
-                # Update zone range
-                range_text = f"${zone.zone_low:.2f} - ${zone.zone_high:.2f}"
+                # Update zone range - more compact format
+                range_text = f"${zone.zone_low:.2f}-${zone.zone_high:.2f}"
                 self.pivot_table.item(row, 2).setText(range_text)
                 
-                # Update score
-                self.pivot_table.item(row, 11).setText(f"{zone.confluence_score:.0f}")
+                # Update confluence indicators
+                self._update_confluence_indicators(row, zone, source_to_col)
                 
-                # Update level designation
-                self.pivot_table.item(row, 12).setText(f"L{zone.level_designation.value}")
+                # Update score (column 17 now)
+                self.pivot_table.item(row, 17).setText(f"{zone.confluence_score:.0f}")
+                
+                # Update level designation (column 18 now)
+                self.pivot_table.item(row, 18).setText(f"L{zone.level_designation.value}")
                 
                 # Color code based on score
-                score_item = self.pivot_table.item(row, 11)
-                level_item = self.pivot_table.item(row, 12)
+                score_item = self.pivot_table.item(row, 17)
+                level_item = self.pivot_table.item(row, 18)
                 
                 if zone.confluence_score >= 12:
                     color = QColor(DarkTheme.SUCCESS)
@@ -245,29 +248,115 @@ class PivotConfluenceWidget(QWidget):
                 logger.warning(f"Could not update row for level {zone.level_name}: {e}")
                 continue
     
+    def _clear_confluence_indicators(self):
+        """Clear all confluence indicator cells"""
+        for row in range(6):
+            for col in range(3, 17):  # Confluence columns (including all market structure)
+                item = self.pivot_table.item(row, col)
+                if item:
+                    item.setText("")
+                    item.setBackground(QColor(DarkTheme.BG_DARK))
+                    item.setForeground(QColor(DarkTheme.TEXT_PRIMARY))
+
+    def _update_confluence_indicators(self, row: int, zone, source_to_col: Dict[str, int]):
+        """Update confluence indicators for a specific zone"""
+        try:
+            # Check if zone has confluence_sources attribute
+            if not hasattr(zone, 'confluence_sources') or not zone.confluence_sources:
+                logger.debug(f"Zone {zone.level_name} has no confluence sources")
+                return
+            
+            # Group confluence sources by type
+            contributing_sources = {}
+            
+            for confluence_source in zone.confluence_sources:
+                try:
+                    # Get source type - handle both enum and string cases
+                    if hasattr(confluence_source, 'source'):
+                        if hasattr(confluence_source.source, 'value'):
+                            source_type = confluence_source.source.value
+                        else:
+                            source_type = str(confluence_source.source)
+                    else:
+                        logger.warning(f"Confluence source missing 'source' attribute")
+                        continue
+                    
+                    # Get source name for market structure separation
+                    source_name = getattr(confluence_source, 'source_name', '')
+                    
+                    # Handle market structure sources separately
+                    if source_type == 'market_structure':
+                        # Map specific market structure sources (including PD Open/Close)
+                        if 'Overnight High' in source_name:
+                            contributing_sources['overnight_high'] = True
+                        elif 'Overnight Low' in source_name:
+                            contributing_sources['overnight_low'] = True
+                        elif 'Prior Day High' in source_name:
+                            contributing_sources['prior_day_high'] = True
+                        elif 'Prior Day Low' in source_name:
+                            contributing_sources['prior_day_low'] = True
+                        elif 'Prior Day Open' in source_name:
+                            contributing_sources['prior_day_open'] = True
+                        elif 'Prior Day Close' in source_name:
+                            contributing_sources['prior_day_close'] = True
+                    else:
+                        # Direct mapping for other sources
+                        source_mapping = {
+                            'hvn_7day': 'hvn_7day',
+                            'hvn_14day': 'hvn_14day',
+                            'hvn_30day': 'hvn_30day',
+                            'monthly_pivots': 'monthly_pivots',
+                            'weekly_pivots': 'weekly_pivots',
+                            'weekly_zones': 'weekly_zones',
+                            'daily_zones': 'daily_zones',
+                            'atr_zones': 'atr_zones',
+                        }
+                        
+                        mapped_source = source_mapping.get(source_type)
+                        if mapped_source:
+                            contributing_sources[mapped_source] = True
+                            logger.debug(f"Mapped {source_type} -> {mapped_source} for {zone.level_name}")
+                        
+                except Exception as e:
+                    logger.warning(f"Error processing confluence source: {e}")
+                    continue
+            
+            # Update visual indicators
+            for source_name, col_idx in source_to_col.items():
+                item = self.pivot_table.item(row, col_idx)
+                if item:
+                    if contributing_sources.get(source_name, False):
+                        # Show confluence indicator
+                        item.setText("✓")
+                        item.setForeground(QColor(DarkTheme.SUCCESS))
+                        item.setBackground(QColor(DarkTheme.BG_LIGHT))
+                        logger.debug(f"Set indicator for {zone.level_name} - {source_name}")
+                    else:
+                        # No confluence
+                        item.setText("")
+                        item.setBackground(QColor(DarkTheme.BG_DARK))
+                        item.setForeground(QColor(DarkTheme.TEXT_PRIMARY))
+            
+            logger.info(f"Updated indicators for {zone.level_name}: {list(contributing_sources.keys())}")
+            
+        except Exception as e:
+            logger.error(f"Error updating confluence indicators for row {row}: {e}")
+    
     def get_confluence_settings(self) -> Dict[str, Dict[str, bool]]:
-        """Get current confluence checkbox settings"""
+        """Get confluence settings - all enabled since we show actual confluences"""
         settings = {}
         level_names = ['R6', 'R4', 'R3', 'S3', 'S4', 'S6']
         source_names = [
             'hvn_7day', 'hvn_14day', 'hvn_30day',
             'monthly_pivots', 'weekly_pivots', 'weekly_zones',
-            'daily_zones', 'atr_zones'
+            'daily_zones', 'atr_zones', 'market_structure'
         ]
         
-        for row, level_name in enumerate(level_names):
+        # Since we're showing actual confluences, all sources are enabled
+        for level_name in level_names:
             settings[level_name] = {}
-            
-            for col, source_name in enumerate(source_names, start=3):
-                widget = self.pivot_table.cellWidget(row, col)
-                if widget:
-                    checkbox = widget.findChild(QCheckBox)
-                    if checkbox:
-                        settings[level_name][source_name] = checkbox.isChecked()
-                    else:
-                        settings[level_name][source_name] = True  # Default
-                else:
-                    settings[level_name][source_name] = True  # Default
+            for source_name in source_names:
+                settings[level_name][source_name] = True
         
         return settings
     
@@ -275,13 +364,16 @@ class PivotConfluenceWidget(QWidget):
         """Clear all pivot data"""
         self.pivot_zones_data = []
         
+        # Clear all confluence indicators first
+        self._clear_confluence_indicators()
+        
         # Clear price, range, score, and level columns
         for row in range(6):
             self.pivot_table.item(row, 1).setText("")  # Price
             self.pivot_table.item(row, 2).setText("")  # Range
-            self.pivot_table.item(row, 11).setText("0")  # Score
-            self.pivot_table.item(row, 12).setText("L1")  # Level
+            self.pivot_table.item(row, 17).setText("0")  # Score (updated column)
+            self.pivot_table.item(row, 18).setText("L1")  # Level (updated column)
             
             # Reset colors
-            self.pivot_table.item(row, 11).setForeground(QColor(DarkTheme.TEXT_PRIMARY))
-            self.pivot_table.item(row, 12).setForeground(QColor(DarkTheme.TEXT_PRIMARY))
+            self.pivot_table.item(row, 17).setForeground(QColor(DarkTheme.TEXT_PRIMARY))
+            self.pivot_table.item(row, 18).setForeground(QColor(DarkTheme.TEXT_PRIMARY))

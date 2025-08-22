@@ -1,5 +1,3 @@
-# levels_zones/src/ui/widgets/overview_widget/metrics_frame.py
-
 """
 Metrics frame for the Overview Widget
 Displays ATR metrics and price levels
@@ -99,6 +97,50 @@ class MetricsFrame(QFrame):
         self.atr_low.setStyleSheet(DarkStyleSheets.INPUT_FIELD)
         self.atr_low.setPlaceholderText("Calculated")
         layout.addWidget(self.atr_low, 4, 3)
+
+        # Market Structure Metrics Row
+        layout.addWidget(QLabel("Overnight High:"), 5, 0)
+        self.overnight_high = QLineEdit()
+        self.overnight_high.setReadOnly(True)
+        self.overnight_high.setStyleSheet(DarkStyleSheets.INPUT_FIELD)
+        self.overnight_high.setPlaceholderText("Calculated")
+        layout.addWidget(self.overnight_high, 5, 1)
+
+        layout.addWidget(QLabel("Overnight Low:"), 5, 2)
+        self.overnight_low = QLineEdit()
+        self.overnight_low.setReadOnly(True)
+        self.overnight_low.setStyleSheet(DarkStyleSheets.INPUT_FIELD)
+        self.overnight_low.setPlaceholderText("Calculated")
+        layout.addWidget(self.overnight_low, 5, 3)
+
+        layout.addWidget(QLabel("Prior Day High:"), 6, 0)
+        self.prior_day_high = QLineEdit()
+        self.prior_day_high.setReadOnly(True)
+        self.prior_day_high.setStyleSheet(DarkStyleSheets.INPUT_FIELD)
+        self.prior_day_high.setPlaceholderText("Calculated")
+        layout.addWidget(self.prior_day_high, 6, 1)
+
+        layout.addWidget(QLabel("Prior Day Low:"), 6, 2)
+        self.prior_day_low = QLineEdit()
+        self.prior_day_low.setReadOnly(True)
+        self.prior_day_low.setStyleSheet(DarkStyleSheets.INPUT_FIELD)
+        self.prior_day_low.setPlaceholderText("Calculated")
+        layout.addWidget(self.prior_day_low, 6, 3)
+        
+        # Prior Day Open and Close - NEW ROW 7
+        layout.addWidget(QLabel("Prior Day Open:"), 7, 0)
+        self.prior_day_open = QLineEdit()
+        self.prior_day_open.setReadOnly(True)
+        self.prior_day_open.setStyleSheet(DarkStyleSheets.INPUT_FIELD)
+        self.prior_day_open.setPlaceholderText("Calculated")
+        layout.addWidget(self.prior_day_open, 7, 1)
+
+        layout.addWidget(QLabel("Prior Day Close:"), 7, 2)
+        self.prior_day_close = QLineEdit()
+        self.prior_day_close.setReadOnly(True)
+        self.prior_day_close.setStyleSheet(DarkStyleSheets.INPUT_FIELD)
+        self.prior_day_close.setPlaceholderText("Calculated")
+        layout.addWidget(self.prior_day_close, 7, 3)
         
         self.setLayout(layout)
     
@@ -120,6 +162,19 @@ class MetricsFrame(QFrame):
             self.atr_high.setText(f"{metrics['atr_high']:.2f}")
         if 'atr_low' in metrics:
             self.atr_low.setText(f"{metrics['atr_low']:.2f}")
+        if 'overnight_high' in metrics:
+            self.overnight_high.setText(f"{metrics['overnight_high']:.2f}")
+        if 'overnight_low' in metrics:
+            self.overnight_low.setText(f"{metrics['overnight_low']:.2f}")
+        if 'prior_day_high' in metrics:
+            self.prior_day_high.setText(f"{metrics['prior_day_high']:.2f}")
+        if 'prior_day_low' in metrics:
+            self.prior_day_low.setText(f"{metrics['prior_day_low']:.2f}")
+        # Add Prior Day Open and Close
+        if 'prior_day_open' in metrics:
+            self.prior_day_open.setText(f"{metrics['prior_day_open']:.2f}")
+        if 'prior_day_close' in metrics:
+            self.prior_day_close.setText(f"{metrics['prior_day_close']:.2f}")
     
     def clear_all(self):
         """Clear all metric displays"""
@@ -131,3 +186,10 @@ class MetricsFrame(QFrame):
         self.open_price.clear()
         self.atr_high.clear()
         self.atr_low.clear()
+        self.overnight_high.clear()
+        self.overnight_low.clear()
+        self.prior_day_high.clear()
+        self.prior_day_low.clear()
+        # Clear Prior Day Open and Close
+        self.prior_day_open.clear()
+        self.prior_day_close.clear()

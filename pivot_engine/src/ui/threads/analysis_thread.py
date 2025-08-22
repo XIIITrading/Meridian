@@ -27,6 +27,7 @@ from calculations.zones.weekly_zone_calc import WeeklyZoneCalculator
 from calculations.zones.daily_zone_calc import DailyZoneCalculator
 from calculations.zones.atr_zone_calc import ATRZoneCalculator
 from data.polygon_bridge import PolygonBridge
+from calculations.zones.market_structure_zones import MarketStructureZoneCalculator
 
 # Set up enhanced logging
 logger = logging.getLogger(__name__)
@@ -64,6 +65,7 @@ class AnalysisThread(QThread):
             self.weekly_zone_calc = WeeklyZoneCalculator()
             self.daily_zone_calc = DailyZoneCalculator()
             self.atr_zone_calc = ATRZoneCalculator()
+            self.market_structure_calc = MarketStructureZoneCalculator()
             
             logger.info("All calculators initialized successfully (Pivot Confluence System)")
             
@@ -402,8 +404,48 @@ class AnalysisThread(QThread):
             except Exception as e:
                 error_msg = self._log_error("ATR Zones", e)
                 logger.warning("ATR zones failed, continuing...")
+
+            #Step 8: Calculate Market Structure Zones
+            self._log_step("Step 7.5: Market Structure Zones", "Calculating market structure zones")
+            self.progress.emit(74, "Calculating market structure zones...")
+
+            market_structure_result = None
+            market_structure_zones = []
+
+            try:
+                if 'metrics' in self.session_data and 'atr_5min' in self.session_data['metrics']:
+                    atr_5min = float(self.session_data['metrics']['atr_5min'])
+                else:
+                    atr_5min = metrics.get('atr_5min', 0)
+                
+                if atr_5min > 0:
+                    market_structure_result = self.market_structure_calc.calculate_zones_from_data(
+                        data_5min,
+                        analysis_datetime,
+                        atr_5min
+                    )
+                    
+                    if market_structure_result:
+                        market_structure_zones = self.market_structure_calc.get_zones_for_confluence(
+                            market_structure_result
+                        )
+                        
+                        # Add metrics to main metrics dict
+                        if 'metrics' in market_structure_result:
+                            metrics.update(market_structure_result['metrics'])
+                        
+                        self._log_step("Market Structure Zones Complete", 
+                                    f"Created {len(market_structure_zones)} zones from market structure")
+                    else:
+                        self._log_step("Warning", "Market structure zone calculation returned no results")
+                else:
+                    self._log_step("Info", "No 5-minute ATR available for market structure zones")
+                    
+            except Exception as e:
+                error_msg = self._log_error("Market Structure Zones", e)
+                logger.warning("Market structure zones failed, continuing...")
             
-            # Step 8: Calculate Metrics
+            # Step 9: Calculate Metrics
             self._log_step("Step 8: Calculate Metrics", "Calculating ATR and price metrics")
             self.progress.emit(75, "Calculating metrics...")
             
@@ -422,7 +464,7 @@ class AnalysisThread(QThread):
                 error_msg = self._log_error("Metrics Calculation", e)
                 metrics = {}
             
-            # Step 9: Get Current Price
+            # Step 10: Get Current Price
             self._log_step("Step 9: Current Price", "Determining current price")
             
             current_price = float(self.session_data.get('pre_market_price', 0))
@@ -486,7 +528,8 @@ class AnalysisThread(QThread):
                     camarilla_results=other_camarilla,  # Weekly and Monthly only
                     weekly_zones=weekly_zones,
                     daily_zones=daily_zones,
-                    atr_zones=atr_zones
+                    atr_zones=atr_zones,
+                    market_structure_zones=market_structure_zones 
                 )
                 
                 zones_with_confluence = pivot_confluence_results.zones_with_confluence
@@ -536,6 +579,7 @@ class AnalysisThread(QThread):
                     'weekly_zones': self._format_weekly_zones(weekly_zone_result),
                     'daily_zones': self._format_daily_zones(daily_zone_result),
                     'atr_zones': self._format_atr_zones(atr_zone_result),
+                    'market_structure_zones': self._format_market_structure_zones(market_structure_result),  # NEW
                     'pivot_confluence_results': pivot_confluence_results,  # PRIMARY RESULTS
                     'zones_ranked': self._format_pivot_confluence_zones(pivot_confluence_results, current_price),
                     'raw_hvn_results': hvn_results,
@@ -543,9 +587,10 @@ class AnalysisThread(QThread):
                     'raw_weekly_zones': weekly_zone_result,
                     'raw_daily_zones': daily_zone_result,
                     'raw_atr_zones': atr_zone_result,
+                    'raw_market_structure': market_structure_result,  # NEW
                     'current_price': current_price
                 })
-                
+    
                 self._log_step("Formatting Complete", "All results formatted successfully")
                 
             except Exception as e:
@@ -724,6 +769,27 @@ class AnalysisThread(QThread):
             if resistance_peaks:
                 nearest_resistance = min(resistance_peaks, key=lambda p: p.price)
                 output.append(f"  Resistance: ${nearest_resistance.price:.2f} ({nearest_resistance.volume_percent:.1f}% volume)")
+        
+        return "\n".join(output)
+
+    def _format_market_structure_zones(self, zone_result: Optional[Dict]) -> str:
+        """Format market structure zones for display"""
+        if not zone_result:
+            return "No market structure zones calculated"
+        
+        if hasattr(self.market_structure_calc, 'format_zones_for_display'):
+            return self.market_structure_calc.format_zones_for_display(zone_result)
+        
+        # Fallback formatting
+        output = []
+        output.append(f"Market Structure Zones")
+        output.append(f"5-Minute ATR: ${zone_result.get('atr_5min', 0):.2f}")
+        output.append("-" * 40)
+        
+        for zone in zone_result.get('zones', []):
+            output.append(f"{zone.get('name', 'Unknown')}: "
+                        f"${zone.get('low', 0):.2f} - ${zone.get('high', 0):.2f}")
+            output.append(f"  Level: ${zone.get('level', 0):.2f}")
         
         return "\n".join(output)
     

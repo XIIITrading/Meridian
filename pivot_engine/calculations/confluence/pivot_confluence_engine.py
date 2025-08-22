@@ -27,6 +27,7 @@ class ConfluenceSource(Enum):
     WEEKLY_ZONES = "weekly_zones"
     DAILY_ZONES = "daily_zones"
     ATR_ZONES = "atr_zones"
+    MARKET_STRUCTURE = "market_structure"
 
 
 class PivotLevel(Enum):
@@ -74,6 +75,7 @@ class PivotZone:
     check_weekly_zones: bool = True
     check_daily_zones: bool = True
     check_atr_zones: bool = True
+    check_market_structure: bool = True
     
     def __post_init__(self):
         """Validate zone data"""
@@ -182,14 +184,15 @@ class PivotConfluenceResult:
 class ConfluenceWeights:
     """Configurable weights for different confluence sources"""
     # Starting with equal weights as requested, but maintaining priority order structure
-    hvn_30day: float = 1.0      # Can be configured to higher values later
-    monthly_pivots: float = 1.0
-    hvn_14day: float = 1.0
-    weekly_zones: float = 1.0
-    weekly_pivots: float = 1.0
+    hvn_30day: float = 3.0      
+    monthly_pivots: float = 3.0
+    hvn_14day: float = 2.0
+    weekly_zones: float = 2.0
+    weekly_pivots: float = 2.0
     hvn_7day: float = 1.0
     daily_zones: float = 1.0
     atr_zones: float = 1.0
+    market_structure: float = 1.0
     
     def get_weight(self, source: ConfluenceSource) -> float:
         """Get weight for a confluence source"""
@@ -202,6 +205,7 @@ class ConfluenceWeights:
             ConfluenceSource.HVN_7DAY: self.hvn_7day,
             ConfluenceSource.DAILY_ZONES: self.daily_zones,
             ConfluenceSource.ATR_ZONES: self.atr_zones,
+            ConfluenceSource.MARKET_STRUCTURE: self.market_structure,
         }
         return weight_map.get(source, 1.0)
 
@@ -229,53 +233,126 @@ class PivotConfluenceEngine:
         camarilla_results: Optional[Dict[str, CamarillaResult]] = None,
         weekly_zones: Optional[List[Dict[str, Any]]] = None,
         daily_zones: Optional[List[Dict[str, Any]]] = None,
-        atr_zones: Optional[List[Dict[str, Any]]] = None
+        atr_zones: Optional[List[Dict[str, Any]]] = None,
+        market_structure_zones: Optional[List[Dict[str, Any]]] = None
     ) -> PivotConfluenceResult:
         """
         Calculate confluence for Daily Camarilla pivot zones.
-        
-        Args:
-            daily_camarilla: Daily Camarilla pivot results
-            atr_5min: 5-minute ATR value for zone creation
-            current_price: Current market price
-            hvn_results: Dictionary mapping timeframe days to HVN results
-            camarilla_results: Dictionary mapping timeframes to Camarilla results (weekly/monthly)
-            weekly_zones: List of weekly zone dictionaries
-            daily_zones: List of daily zone dictionaries  
-            atr_zones: List of ATR zone dictionaries
-            
-        Returns:
-            PivotConfluenceResult with scored and ranked zones
         """
-        self.logger.info("Starting pivot confluence calculation")
+        self.logger.info("="*80)
+        self.logger.info("STARTING PIVOT CONFLUENCE CALCULATION - DETAILED DEBUG")
+        self.logger.info("="*80)
         
         # Step 1: Create pivot zones from Daily Camarilla results
+        self.logger.info("\nSTEP 1: Creating Pivot Zones")
+        self.logger.info(f"Daily Camarilla has {len(daily_camarilla.pivots)} pivots")
+        self.logger.info(f"5-minute ATR: {atr_5min:.4f}")
+        
         pivot_zones = self._create_pivot_zones(daily_camarilla, atr_5min)
         if not pivot_zones:
             self.logger.warning("No valid Daily Camarilla pivots found")
             return PivotConfluenceResult()
         
-        # Step 2: Collect all confluence sources
-        all_confluence_sources = self._collect_all_confluence_sources(
-            hvn_results=hvn_results,
-            camarilla_results=camarilla_results,
-            weekly_zones=weekly_zones,
-            daily_zones=daily_zones,
-            atr_zones=atr_zones
-        )
+        self.logger.info(f"Created {len(pivot_zones)} pivot zones:")
+        for zone in pivot_zones:
+            self.logger.info(f"  {zone.level_name}: ${zone.pivot_price:.2f} "
+                            f"(Zone: ${zone.zone_low:.2f}-${zone.zone_high:.2f})")
         
-        self.logger.info(f"Collected {len(all_confluence_sources)} confluence sources")
+        # Step 2: Collect all confluence sources
+        self.logger.info("\nSTEP 2: Collecting Confluence Sources")
+        
+        all_confluence_sources = []
+        
+        # Collect HVN sources
+        if hvn_results:
+            hvn_sources = self._collect_hvn_sources(hvn_results)
+            self.logger.info(f"HVN Sources: {len(hvn_sources)} total")
+            for source in hvn_sources[:5]:  # Log first 5
+                self.logger.info(f"  - {source.source.value} {source.source_name}: ${source.price:.2f}")
+            all_confluence_sources.extend(hvn_sources)
+        
+        # Collect Camarilla sources (Weekly/Monthly)
+        if camarilla_results:
+            cam_sources = self._collect_camarilla_sources(camarilla_results)
+            self.logger.info(f"Camarilla Sources (Weekly/Monthly): {len(cam_sources)} total")
+            for source in cam_sources:
+                self.logger.info(f"  - {source.source.value} {source.source_name}: ${source.price:.2f}")
+            all_confluence_sources.extend(cam_sources)
+        
+        # Collect Weekly zones
+        if weekly_zones:
+            weekly_sources = self._collect_weekly_zone_sources(weekly_zones)
+            self.logger.info(f"Weekly Zone Sources: {len(weekly_sources)} total")
+            for source in weekly_sources:
+                self.logger.info(f"  - {source.source_name}: ${source.zone_low:.2f}-${source.zone_high:.2f}")
+            all_confluence_sources.extend(weekly_sources)
+        
+        # Collect Daily zones
+        if daily_zones:
+            daily_sources = self._collect_daily_zone_sources(daily_zones)
+            self.logger.info(f"Daily Zone Sources: {len(daily_sources)} total")
+            for source in daily_sources:
+                self.logger.info(f"  - {source.source_name}: ${source.zone_low:.2f}-${source.zone_high:.2f}")
+            all_confluence_sources.extend(daily_sources)
+        
+        # Collect ATR zones
+        if atr_zones:
+            atr_sources = self._collect_atr_zone_sources(atr_zones)
+            self.logger.info(f"ATR Zone Sources: {len(atr_sources)} total")
+            for source in atr_sources:
+                self.logger.info(f"  - {source.source_name}: ${source.zone_low:.2f}-${source.zone_high:.2f}")
+            all_confluence_sources.extend(atr_sources)
+        
+        # Collect Market Structure zones
+        if market_structure_zones:
+            market_sources = self._collect_market_structure_sources(market_structure_zones)
+            self.logger.info(f"Market Structure Sources: {len(market_sources)} total")
+            for source in market_sources:
+                self.logger.info(f"  - {source.source_name}: ${source.zone_low:.2f}-${source.zone_high:.2f}")
+            all_confluence_sources.extend(market_sources)
+        
+        self.logger.info(f"\nTOTAL CONFLUENCE SOURCES: {len(all_confluence_sources)}")
         
         # Step 3: Check each confluence source against each pivot zone
-        for confluence_source in all_confluence_sources:
-            source_weight = self.weights.get_weight(confluence_source.source)
+        self.logger.info("\nSTEP 3: Checking Confluence for Each Pivot Zone")
+        self.logger.info("="*60)
+        
+        for pivot_zone in pivot_zones:
+            self.logger.info(f"\nChecking {pivot_zone.level_name} "
+                            f"(${pivot_zone.zone_low:.2f}-${pivot_zone.zone_high:.2f}):")
             
-            for pivot_zone in pivot_zones:
+            confluence_count = 0
+            
+            for confluence_source in all_confluence_sources:
+                source_weight = self.weights.get_weight(confluence_source.source)
+                
                 # Check if this source type is enabled for this zone
                 if self._is_source_enabled(pivot_zone, confluence_source.source):
-                    pivot_zone.add_confluence(confluence_source, source_weight)
+                    # Check if source creates confluence
+                    if confluence_source.is_zone:
+                        # Zone overlap check
+                        if pivot_zone.overlaps_zone(confluence_source.zone_low, confluence_source.zone_high):
+                            self.logger.info(f"  ✓ ZONE OVERLAP: {confluence_source.source.value} - "
+                                           f"{confluence_source.source_name} "
+                                           f"(${confluence_source.zone_low:.2f}-${confluence_source.zone_high:.2f})")
+                            pivot_zone.add_confluence(confluence_source, source_weight)
+                            confluence_count += 1
+                    else:
+                        # Point level check
+                        if pivot_zone.contains_price(confluence_source.price):
+                            self.logger.info(f"  ✓ PRICE IN ZONE: {confluence_source.source.value} - "
+                                           f"{confluence_source.source_name} at ${confluence_source.price:.2f}")
+                            pivot_zone.add_confluence(confluence_source, source_weight)
+                            confluence_count += 1
+            
+            self.logger.info(f"  Total confluences for {pivot_zone.level_name}: {confluence_count}")
+            self.logger.info(f"  Confluence Score: {pivot_zone.confluence_score:.1f}")
+            self.logger.info(f"  Level Designation: L{pivot_zone.level_designation.value}")
         
         # Step 4: Create result summary
+        self.logger.info("\n" + "="*60)
+        self.logger.info("CONFLUENCE CALCULATION COMPLETE")
+        
         result = PivotConfluenceResult(
             pivot_zones=pivot_zones,
             current_price=Decimal(str(current_price)) if current_price else None,
@@ -289,8 +366,21 @@ class PivotConfluenceEngine:
         if result.pivot_zones:
             highest_zone = max(result.pivot_zones, key=lambda z: z.confluence_score)
             result.highest_confluence_zone = highest_zone.level_name
+            self.logger.info(f"Highest Confluence Zone: {highest_zone.level_name} "
+                            f"with score {highest_zone.confluence_score:.1f}")
         
-        self.logger.info(f"Pivot confluence calculation complete: {result.zones_with_confluence}/{len(pivot_zones)} zones have confluence")
+        # Summary
+        self.logger.info(f"\nFINAL RESULTS:")
+        self.logger.info(f"  Total Confluence Sources: {result.total_confluence_sources}")
+        self.logger.info(f"  Zones with Confluence: {result.zones_with_confluence}/{len(pivot_zones)}")
+        
+        for zone in pivot_zones:
+            sources_list = [f"{s.source.value}:{s.source_name}" for s in zone.confluence_sources]
+            self.logger.info(f"  {zone.level_name}: Score={zone.confluence_score:.1f}, "
+                            f"Count={zone.confluence_count}, "
+                            f"Sources=[{', '.join(sources_list[:3])}...]")  # Show first 3 sources
+        
+        self.logger.info("="*80)
         
         return result
     
@@ -333,7 +423,8 @@ class PivotConfluenceEngine:
         camarilla_results: Optional[Dict[str, CamarillaResult]] = None,
         weekly_zones: Optional[List[Dict[str, Any]]] = None,
         daily_zones: Optional[List[Dict[str, Any]]] = None,
-        atr_zones: Optional[List[Dict[str, Any]]] = None
+        atr_zones: Optional[List[Dict[str, Any]]] = None,
+        market_structure_zones: Optional[List[Dict[str, Any]]] = None
     ) -> List[ConfluenceCheck]:
         """Collect all confluence sources"""
         all_sources = []
@@ -352,6 +443,9 @@ class PivotConfluenceEngine:
         
         if atr_zones:
             all_sources.extend(self._collect_atr_zone_sources(atr_zones))
+        
+        if market_structure_zones:
+            all_sources.extend(self._collect_market_structure_sources(market_structure_zones))
         
         return all_sources
     
@@ -506,6 +600,44 @@ class PivotConfluenceEngine:
         
         return sources
     
+    def _collect_market_structure_sources(self, market_structure_zones: List[Dict[str, Any]]) -> List[ConfluenceCheck]:
+        """Collect market structure zones as confluence sources with enhanced logging"""
+        sources = []
+        
+        self.logger.info("  Collecting Market Structure zones:")
+        
+        for zone in market_structure_zones:
+            try:
+                zone_name = zone.get('name', 'Unknown')
+                zone_low = zone.get('low', 0)
+                zone_high = zone.get('high', 0)
+                zone_center = zone.get('level', zone.get('center', 0))
+                
+                self.logger.info(f"    Processing: {zone_name} - "
+                               f"Low: ${zone_low:.2f}, High: ${zone_high:.2f}, "
+                               f"Center: ${zone_center:.2f}")
+                
+                if zone_low and zone_high and zone_low > 0 and zone_high > 0:
+                    sources.append(ConfluenceCheck(
+                        source=ConfluenceSource.MARKET_STRUCTURE,
+                        source_name=zone_name,
+                        price=Decimal(str(zone_center if zone_center else (zone_low + zone_high) / 2)),
+                        zone_low=Decimal(str(zone_low)),
+                        zone_high=Decimal(str(zone_high)),
+                        is_zone=True,
+                        weight=1.0
+                    ))
+                    self.logger.info(f"      ✓ Added as confluence source")
+                else:
+                    self.logger.warning(f"      ✗ Skipped - invalid zone bounds")
+                    
+            except (ValueError, TypeError) as e:
+                self.logger.warning(f"    ✗ Skipping invalid market structure zone: {e}")
+                continue
+        
+        self.logger.info(f"  Total Market Structure sources collected: {len(sources)}")
+        return sources
+    
     def _is_source_enabled(self, pivot_zone: PivotZone, source: ConfluenceSource) -> bool:
         """Check if a confluence source is enabled for a pivot zone"""
         source_flag_map = {
@@ -517,6 +649,7 @@ class PivotConfluenceEngine:
             ConfluenceSource.WEEKLY_ZONES: pivot_zone.check_weekly_zones,
             ConfluenceSource.DAILY_ZONES: pivot_zone.check_daily_zones,
             ConfluenceSource.ATR_ZONES: pivot_zone.check_atr_zones,
+            ConfluenceSource.MARKET_STRUCTURE: pivot_zone.check_market_structure,
         }
         return source_flag_map.get(source, True)
     
@@ -549,7 +682,8 @@ class PivotConfluenceEngine:
             output.append(f"\nConfluence Sources:")
             for source_type, count in result.source_summary.items():
                 source_name = source_type.value.replace('_', ' ').title()
-                if source_type in [ConfluenceSource.WEEKLY_ZONES, ConfluenceSource.DAILY_ZONES, ConfluenceSource.ATR_ZONES]:
+                if source_type in [ConfluenceSource.WEEKLY_ZONES, ConfluenceSource.DAILY_ZONES, 
+                                  ConfluenceSource.ATR_ZONES, ConfluenceSource.MARKET_STRUCTURE]:
                     output.append(f"  • {source_name}: {count} zones")
                 else:
                     output.append(f"  • {source_name}: {count} levels")
@@ -617,7 +751,8 @@ class PivotConfluenceEngine:
             for source_type, sources in by_source.items():
                 source_name = source_type.value.replace('_', ' ').title()
                 
-                if source_type in [ConfluenceSource.WEEKLY_ZONES, ConfluenceSource.DAILY_ZONES, ConfluenceSource.ATR_ZONES]:
+                if source_type in [ConfluenceSource.WEEKLY_ZONES, ConfluenceSource.DAILY_ZONES, 
+                                  ConfluenceSource.ATR_ZONES, ConfluenceSource.MARKET_STRUCTURE]:
                     zone_details = []
                     for source in sources:
                         if source.is_zone:

@@ -1,0 +1,23 @@
+backtest_engine/
+├── config.py
+├── requirements.txt
+├── cache/
+│   └── polygon_data/
+├── core/
+│   ├── __init__.py
+│   ├── confluence_reconstructor.py
+│   └── models.py
+├── data/
+│   ├── __init__.py
+│   ├── polygon_fetcher.py
+│   └── supabase_client.py
+├── docs/
+│   └── implementation_plan.txt
+├── scripts/
+│   └── __init__.py
+├── strategies/
+│   └── __init__.py
+├── tests/
+│   └── __init__.py
+└── ui/
+    └── __init__.py

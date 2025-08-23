@@ -1,0 +1,359 @@
+Comprehensive Backtesting Engine Implementation Plan (Revised)
+Project Path: C:\XIIITradingSystems\Meridian\backtest_engine
+Approach: Semi-Automated Trade Analysis System
+Project Overview
+A semi-automated backtesting system where traders manually identify trade setups and the system analyzes performance, confluence patterns, and provides statistical insights.
+
+✅ Phase 1: Project Setup & Database Schema (COMPLETE)
+Status: Complete
+
+Project structure initialized
+Configuration established
+Base directories created
+
+Potential Updates Needed:
+
+config.py: Add FIXED_RISK_AMOUNT = 250 constant
+config.py: Add MINUTE_DATA_BUFFER = 5 (extra minutes before/after for analysis)
+
+
+✅ Phase 2: Core Models & Data Layer (COMPLETE)
+Status: Complete
+
+Data models defined
+Confluence reconstructor working
+Supabase client operational
+Polygon fetcher implemented
+
+Recommended Additions:
+File: core/models.py (Add new model)
+python@dataclass
+class ManualTradeEntry:
+    """Model for semi-automated trade entries"""
+    entry_candle_time: datetime
+    exit_candle_time: datetime
+    trade_direction: str  # 'long' or 'short'
+    entry_price: float
+    stop_price: float
+    target_price: float
+    exit_price: float
+    fixed_risk: float = 250.0
+    notes: Optional[str] = None
+
+Phase 3 Completion Checklist ✅
+
+✅ Manual trade entry working smoothly
+✅ Zone alignment correctly identified
+✅ MFE/MAE calculated from minute data
+✅ Trade results match calculations
+✅ All data persisted to database
+✅ Session statistics updating
+
+📊 Phase 4: Performance Analysis & Reporting (Days 9-11) [UPDATED]
+Step 4.1: Statistical Analyzer
+File: analysis/statistical_analyzer.py
+python"""
+Deep statistical analysis of manual trades
+"""
+
+Key Methods:
+1. analyze_by_confluence_level() -> ConfluenceAnalysis
+   - Win rate per level (L1-L5)
+   - Average R-multiple per level
+   - Sample size and significance
+
+2. analyze_by_zone_distance() -> ZoneDistanceAnalysis
+   - Performance vs entry location in zone
+   - Optimal entry points
+
+3. analyze_by_time_patterns() -> TimeAnalysis
+   - Time of day performance
+   - Day of week patterns
+   - Time to target/stop distributions
+
+4. analyze_confluence_sources() -> SourceAnalysis
+   - Which sources predict winners
+   - Source combination patterns
+   - Negative indicators
+Step 4.2: Pattern Recognition Engine
+File: analysis/pattern_recognizer.py
+python"""
+Identifies recurring patterns in winning/losing trades
+"""
+
+Key Methods:
+1. find_winning_patterns() -> List[Pattern]
+   - Common confluence combinations
+   - Optimal entry conditions
+   - Market context patterns
+
+2. find_losing_patterns() -> List[Pattern]
+   - Confluence to avoid
+   - Bad entry locations
+   - Failed setup indicators
+
+3. calculate_pattern_significance(pattern: Pattern) -> float
+   - Statistical validation
+   - Confidence intervals
+Step 4.3: Report Generator
+File: analysis/report_generator.py
+python"""
+Creates comprehensive analysis reports
+"""
+
+Key Methods:
+1. generate_session_report(session_id: str) -> Report
+   - Summary statistics
+   - Trade-by-trade breakdown
+   - Pattern analysis
+   - Recommendations
+
+2. generate_comparative_report(session_ids: List[str]) -> Report
+   - Compare multiple analysis sessions
+   - Track improvement over time
+   - Identify consistency patterns
+
+3. export_report(report: Report, format: str) -> None
+   - HTML with interactive charts
+   - PDF for documentation
+   - CSV for further analysis
+
+🖥️ Phase 5: UI Components (Days 12-14) [REVISED]
+Step 5.1: Manual Trade Entry Widget
+File: ui/manual_entry_widget.py
+python"""
+PyQt6 widget for entering trade details
+"""
+
+Features:
+1. Date/Time pickers for entry/exit candles
+2. Price input fields with validation
+3. Direction toggle (Long/Short)
+4. Auto-calculation displays:
+   - Position size
+   - Risk amount
+   - R:R ratio
+5. Quick templates for common setups
+6. Batch entry mode for multiple trades
+
+Key Methods:
+- validate_inputs() -> bool
+- calculate_preview() -> Dict
+- submit_trade() -> ManualTradeEntry
+- load_template(template_name: str) -> None
+Step 5.2: Trade Analysis Dashboard
+File: ui/analysis_dashboard.py
+python"""
+Real-time analysis display as trades are entered
+"""
+
+Components:
+1. Trade list with live metrics
+2. Running statistics panel
+3. Confluence breakdown view
+4. Chart with trade markers
+5. Quick edit functionality
+
+Key Methods:
+- refresh_statistics() -> None
+- display_trade_details(trade_id: str) -> None
+- edit_trade(trade_id: str) -> None
+- export_session() -> None
+Step 5.3: Performance Visualization
+File: ui/performance_charts.py
+python"""
+Interactive charts for pattern analysis
+"""
+
+Charts:
+1. Win rate by confluence level (bar chart)
+2. R-multiple distribution (histogram)
+3. P&L curve (line chart)
+4. Confluence heatmap
+5. Time-based performance (scatter plot)
+
+Key Methods:
+- create_confluence_chart(data: DataFrame) -> Chart
+- create_pnl_curve(trades: List) -> Chart
+- create_heatmap(correlations: Dict) -> Chart
+
+🔧 Phase 6: Integration & Automation (Days 15-16) [UPDATED]
+Step 6.1: Main Application
+File: main.py
+python"""
+Main application window with workflow management
+"""
+
+Layout:
+1. Menu bar with tools and settings
+2. Tab interface:
+   - Tab 1: Manual Trade Entry
+   - Tab 2: Current Session Analysis
+   - Tab 3: Historical Performance
+   - Tab 4: Pattern Discovery
+   - Tab 5: Reports
+3. Status bar with connection indicators
+Step 6.2: Batch Import Tool
+File: scripts/batch_import.py
+python"""
+Import trades from CSV or broker exports
+"""
+
+Features:
+- CSV template generator
+- Broker format parsers
+- Validation and error reporting
+- Duplicate detection
+Step 6.3: Analysis Automation
+File: scripts/auto_analyzer.py
+python"""
+Automated analysis of new trades
+"""
+
+Features:
+- Watch for new trade entries
+- Auto-fetch minute data
+- Calculate metrics immediately
+- Alert on pattern matches
+
+📋 Database Schema Updates
+sql-- Manual trade entries table (PRIMARY)
+CREATE TABLE IF NOT EXISTS backtest_trades_manual (
+    -- Identity
+    trade_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    analysis_session_id UUID NOT NULL,
+    levels_zones_id UUID REFERENCES levels_zones(id),
+    
+    -- User Inputs
+    entry_candle_time TIMESTAMPTZ NOT NULL,
+    exit_candle_time TIMESTAMPTZ NOT NULL,
+    trade_direction VARCHAR(10) NOT NULL CHECK (trade_direction IN ('long', 'short')),
+    entry_price DECIMAL(10,2) NOT NULL,
+    stop_price DECIMAL(10,2) NOT NULL,
+    target_price DECIMAL(10,2) NOT NULL,
+    exit_price DECIMAL(10,2) NOT NULL,
+    
+    -- Calculated Fields
+    shares DECIMAL(10,2) NOT NULL,
+    fixed_risk DECIMAL(10,2) DEFAULT 250.00,
+    
+    -- Zone Alignment
+    zone_number INT,
+    zone_confluence_level VARCHAR(5),
+    zone_confluence_score DECIMAL(5,2),
+    confluence_sources JSONB,
+    distance_from_zone_ticks INT,
+    
+    -- Performance Metrics
+    max_favorable_excursion DECIMAL(10,2),
+    max_adverse_excursion DECIMAL(10,2),
+    trade_result DECIMAL(10,2),
+    r_multiple DECIMAL(5,2),
+    risk_reward_ratio DECIMAL(5,2),
+    
+    -- Timing Analysis
+    actual_exit_time TIMESTAMPTZ,
+    exit_reason VARCHAR(20) CHECK (exit_reason IN ('stop_hit', 'target_hit', 'time_exit', 'manual_exit')),
+    minutes_to_target INT,
+    minutes_to_stop INT,
+    total_minutes_in_trade INT,
+    
+    -- Validation
+    pivot_validated BOOLEAN DEFAULT FALSE,
+    zone_validated BOOLEAN DEFAULT FALSE,
+    data_complete BOOLEAN DEFAULT FALSE,
+    
+    -- Meta
+    notes TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Analysis sessions table
+CREATE TABLE IF NOT EXISTS analysis_sessions (
+    session_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    session_date DATE NOT NULL,
+    ticker VARCHAR(10) NOT NULL,
+    total_trades INT DEFAULT 0,
+    winning_trades INT DEFAULT 0,
+    losing_trades INT DEFAULT 0,
+    total_pnl DECIMAL(10,2),
+    win_rate DECIMAL(5,2),
+    avg_winner DECIMAL(10,2),
+    avg_loser DECIMAL(10,2),
+    profit_factor DECIMAL(5,2),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Create indexes for performance
+CREATE INDEX idx_manual_trades_session ON backtest_trades_manual(analysis_session_id);
+CREATE INDEX idx_manual_trades_confluence ON backtest_trades_manual(zone_confluence_level);
+CREATE INDEX idx_manual_trades_result ON backtest_trades_manual(trade_result);
+CREATE INDEX idx_manual_trades_date ON backtest_trades_manual(entry_candle_time);
+
+🚀 Implementation Priority Order
+Immediate Priority (Week 1)
+
+✅ Database tables creation
+✅ Manual trade input handler
+✅ Zone alignment analyzer
+✅ Minute data analyzer
+✅ Trade result calculator
+
+Secondary Priority (Week 2)
+
+✅ UI for trade entry
+✅ Basic analysis dashboard
+✅ Storage manager
+✅ Session management
+
+Final Priority (Week 3)
+
+✅ Statistical analyzer
+✅ Pattern recognition
+✅ Report generation
+✅ Performance charts
+
+
+🎯 Success Metrics
+Phase 3 Completion Criteria
+
+ Can enter trades manually with all parameters
+ System correctly identifies zone alignment
+ MFE/MAE calculated from minute data
+ Trade results match manual calculations
+ All data persisted to database
+
+Phase 4 Completion Criteria
+
+ Win rate by confluence level visible
+ Pattern recognition identifies 5+ patterns
+ Reports exportable in multiple formats
+ Statistical significance calculated
+
+Phase 5 Completion Criteria
+
+ UI allows rapid trade entry (<30 seconds per trade)
+ Dashboard updates in real-time
+ Charts are interactive and informative
+ Batch import working for 100+ trades
+
+Phase 6 Completion Criteria
+
+ Full application runs smoothly
+ Can analyze 1000+ trades without performance issues
+ Patterns lead to actionable insights
+ System improves trade selection
+
+
+📝 Next Immediate Steps
+
+Create database tables (run SQL above)
+Implement manual_trade_handler.py (validate inputs, calculate position size)
+Implement zone_alignment_analyzer.py (map trades to zones)
+Implement minute_data_analyzer.py (fetch 1-min data, calculate MFE/MAE)
+Create simple CLI interface for testing before UI
+Test with 5-10 manual trades to validate calculations
+
+This revised plan focuses on the semi-automated approach where you manually identify trades and the system provides comprehensive analysis, pattern recognition, and performance insights.

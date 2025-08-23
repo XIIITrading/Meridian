@@ -52,6 +52,7 @@ Methods: __post_init__(), to_dict(), from_dict()
 TradingSession: Complete trading session data
 
 Fields: ticker, date, ticker_id, is_live, historical_date/time, weekly_data, daily_data, m15_levels, metrics (ATRs), timestamps
+Metrics: pre_market_price, atr_5min, atr_2hour, atr_15min, daily_atr, atr_high, atr_low
 Methods:
 
 calculate_atr_bands(): Calculates ATR high/low bands
@@ -95,7 +96,7 @@ get_candle_at_datetime(): Gets full candle data at datetime
 Calculations:
 
 calculate_atr(): Computes Average True Range from OHLC data
-update_session_metrics(): Updates TradingSession with calculated metrics
+update_session_metrics(): Updates TradingSession with calculated metrics (including atr_2hour)
 
 
 Utility Methods:
@@ -114,7 +115,7 @@ Session Operations:
 
 create_session(): Creates new trading session in database
 get_session(): Retrieves session by ticker_id
-update_session(): Updates existing session
+update_session(): Updates existing session (includes atr_2hour field)
 list_sessions(): Lists sessions with optional filters
 save_to_levels_zones(): Saves to denormalized table for reporting
 
@@ -135,7 +136,7 @@ complete_analysis_run(): Marks analysis run complete
 
 Private Helper Methods:
 
-_session_from_db(): Converts DB record to TradingSession
+_session_from_db(): Converts DB record to TradingSession (handles atr_2hour)
 _save_price_levels(): Saves price level collection
 _get_price_levels(): Retrieves price levels
 _delete_price_levels(): Removes price levels
@@ -175,7 +176,7 @@ validate_for_analysis(): Checks readiness for analysis
 
 ATRValidator: ATR calculation validation
 
-validate_atr_values(): Consistency checks for ATR values
+validate_atr_values(): Consistency checks for ATR values (includes atr_2hour)
 
 
 DateTimeValidator: Date/time validation
@@ -214,10 +215,10 @@ list_sessions(): Returns session summaries
 Helper Methods:
 
 _log_data_structure(): Debug logging for data structures
-_log_session_object(): Detailed session logging
+_log_session_object(): Detailed session logging (includes atr_2hour)
 _log_validation_errors(): Error detail logging
-_create_session_from_ui_data(): UI to model conversion
-_convert_session_to_ui_format(): Model to UI conversion
+_create_session_from_ui_data(): UI to model conversion (handles atr_2hour)
+_convert_session_to_ui_format(): Model to UI conversion (handles atr_2hour)
 
 
 
@@ -227,7 +228,7 @@ PolygonDataWorker (QThread):
 
 Operations:
 
-_fetch_and_calculate(): Fetches data and calculates metrics
+_fetch_and_calculate(): Fetches data and calculates metrics (includes 2-hour ATR)
 _fetch_atr_data(): ATR-specific data fetching
 _fetch_hvn_analysis(): HVN analysis across timeframes
 
@@ -235,7 +236,7 @@ _fetch_hvn_analysis(): HVN analysis across timeframes
 Calculation Methods:
 
 _calculate_atr(): ATR computation
-_resample_data(): Timeframe resampling
+_resample_data(): Timeframe resampling (includes 2H for 2-hour periods)
 _get_price_at_datetime(): Price at specific time
 _get_session_open_price(): Market open price
 
@@ -403,7 +404,7 @@ _ensure_utc(): Timezone normalization
 
 Calculation Methods:
 
-_calculate_metrics(): Computes all ATR metrics
+_calculate_metrics(): Computes all ATR metrics (includes 2-hour ATR)
 _calculate_atr(): ATR calculation
 _get_price_at_datetime(): Price retrieval
 
@@ -448,7 +449,7 @@ Data Methods:
 
 collect_session_data(): Gathers all UI data
 load_session_data(): Loads session into UI
-update_calculations(): Updates calculation displays
+update_calculations(): Updates calculation displays (now updates M15 confluence table)
 store_confluence_results(): Stores analysis results
 clear_all(): Clears all fields
 
@@ -457,7 +458,6 @@ clear_all(): Clears all fields
 session_info.py
 SessionInfoFrame Class:
 
-Purpose: Top bar with ticker, date/time, and action buttons
 Components: ticker_input, live_toggle, date_input, time_input
 Buttons: fetch_data_btn, run_analysis_btn, clear_all_btn, save_to_db_btn
 Signal: ticker_changed
@@ -519,6 +519,33 @@ SectionHeader Class:
 
 Purpose: Styled section header label
 
+m15_confluence_widget.py (NEW)
+M15ConfluenceWidget Class:
+
+Purpose: Visual table display for M15 zone confluence ranking
+Replaces text-based confluence display with interactive table
+Components:
+
+confluence_table: 6-row table showing zones and their confluences
+Headers: Zone, Price Range, Direction, confluence sources, Score, Level
+
+
+Methods:
+
+update_confluence_data(): Updates table with confluence results
+_clear_table(): Clears all table data
+clear_data(): Resets confluence data
+get_top_zones(): Returns highest scoring zones
+
+
+Visual Features:
+
+Checkmarks (✓) for confluence indicators
+Color-coded zones using DarkTheme.ZONE_COLORS
+Direction arrows (↑↓←→) relative to current price
+Score-based color coding (green/blue/orange/gray)
+
+
 
 Calculations Layer (/src/calculations/)
 Volume Analysis (/src/calculations/volume/)
@@ -557,11 +584,11 @@ Analysis Execution → AnalysisThread orchestrates all calculations:
 
 HVN analysis (7-day, 14-day, 30-day)
 Camarilla pivots (daily, weekly, monthly)
-Zone calculations (weekly, daily, ATR)
+Zone calculations (weekly with 2-hour ATR, daily with 15-minute ATR, ATR-based)
 Confluence analysis combining all inputs
 
 
-Results Display → CalculationsDisplay widgets show formatted results
+Results Display → CalculationsDisplay widgets and M15ConfluenceWidget table
 Database Save → DatabaseService → SupabaseClient → Supabase database
 Session Load → SessionPickerDialog → DatabaseService → UI population
 

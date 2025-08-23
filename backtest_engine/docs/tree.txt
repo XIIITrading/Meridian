@@ -1,20 +1,28 @@
 backtest_engine/
-├── config.py
+├── backtest_config.py
 ├── requirements.txt
 ├── cache/
 │   └── polygon_data/
+│       └── minute_data/
 ├── core/
 │   ├── __init__.py
 │   ├── confluence_reconstructor.py
-│   └── models.py
+│   ├── manual_trade_handler.py
+│   ├── minute_data_analyzer.py
+│   ├── models.py
+│   └── zone_alignment_analyzer.py
 ├── data/
 │   ├── __init__.py
+│   ├── backtest_storage_manager.py
 │   ├── polygon_fetcher.py
 │   └── supabase_client.py
 ├── docs/
-│   └── implementation_plan.txt
+│   ├── implementation_plan.txt
+│   └── tree.txt
 ├── scripts/
-│   └── __init__.py
+│   ├── __init__.py
+│   ├── cli_trade_entry.py
+│   └── clear_polygon_cache.py
 ├── strategies/
 │   └── __init__.py
 ├── tests/

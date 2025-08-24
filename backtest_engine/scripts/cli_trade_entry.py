@@ -9,7 +9,7 @@ from datetime import datetime, time
 from typing import Optional, Any, Dict
 import json
 import logging
-logging.basicConfig(level=logging.DEBUG)
+# Don't set logging level here - will be set based on debug mode
 
 from core.manual_trade_handler import ManualTradeHandler
 from core.zone_alignment_analyzer import ZoneAlignmentAnalyzer
@@ -22,7 +22,14 @@ from data.backtest_storage_manager import BacktestStorageManager
 class CLITradeEntry:
     """Command-line interface for entering trades with navigation"""
     
-    def __init__(self):
+    def __init__(self, debug_mode=False):
+        """Initialize with optional debug mode"""
+        # Set logging level based on debug mode
+        if debug_mode:
+            logging.basicConfig(level=logging.DEBUG, force=True)
+        else:
+            logging.basicConfig(level=logging.WARNING, force=True)
+        
         # Initialize components
         self.handler = ManualTradeHandler()
         self.supabase = BacktestSupabaseClient()
@@ -31,7 +38,7 @@ class CLITradeEntry:
         self.zone_analyzer = ZoneAlignmentAnalyzer(self.reconstructor)
         self.polygon = PolygonBacktestFetcher()
         self.minute_analyzer = MinuteDataAnalyzer(self.polygon)
-        self.debug = False
+        self.debug = debug_mode
         self.polygon_available = False
         
         # Store inputs for navigation
@@ -56,6 +63,14 @@ class CLITradeEntry:
             print(f"⚠ Polygon API unavailable: {e}")
             print("  Minute data and metrics will not be available")
             self.polygon_available = False
+    
+    def validate_ticker_levels(self, ticker_id: str) -> bool:
+        """Check if ticker has levels data (silent check)"""
+        try:
+            zones_data = self.storage.get_levels_zones_data(ticker_id)
+            return zones_data is not None
+        except:
+            return False
     
     def get_input_with_back(self, prompt: str, field_name: str, validator=None, converter=None) -> Any:
         """
@@ -214,12 +229,34 @@ class CLITradeEntry:
             result = None
             
             if field_name == 'ticker_id':
-                result = self.get_input_with_back(
-                    "Enter Ticker ID (e.g., AMD.121824)",
-                    field_name,
-                    validator=lambda x: '.' in x and len(x.split('.')[1]) == 6,
-                    converter=lambda x: x.upper()
-                )
+                while True:
+                    result = self.get_input_with_back(
+                        "Enter Ticker ID (e.g., AMD.121824)",
+                        field_name,
+                        validator=lambda x: '.' in x and len(x.split('.')[1]) == 6,
+                        converter=lambda x: x.upper()
+                    )
+                    
+                    if result == 'BACK':
+                        break
+                    
+                    # Check for levels data and provide clear feedback
+                    print(f"\nChecking levels data for {result}...")
+                    has_levels = self.validate_ticker_levels(result)
+                    
+                    if has_levels:
+                        print(f"✓ Levels data found for {result}")
+                        # Valid ticker with levels data, continue
+                        break
+                    else:
+                        print(f"⚠ No levels data found for {result}")
+                        print("  Note: Zone analysis will not be available")
+                        proceed = input("\nContinue anyway? (y/n): ").strip().lower()
+                        
+                        if proceed != 'y':
+                            continue  # Stay on ticker_id field
+                        else:
+                            break  # User chose to continue without levels
                 
             elif field_name == 'entry_time':
                 result = self.get_time_input_with_back("Entry candle time", field_name)
@@ -275,10 +312,6 @@ class CLITradeEntry:
         print("Market Hours: 14:30-21:00 UTC (9:30 AM - 4:00 PM ET)")
         print("-"*60)
         
-        # Ask about debug mode
-        debug_mode = input("Enable debug mode? (y/n): ").strip().lower()
-        self.debug = (debug_mode == 'y')
-        
         # Collect all inputs
         if not self.collect_trade_inputs():
             print("\nExiting...")
@@ -308,15 +341,8 @@ class CLITradeEntry:
             print(f"✗ Error: {e}")
             return
         
-        # Check if levels_zones data exists
+        # Get zones data for analysis (already validated during input)
         zones_data = self.storage.get_levels_zones_data(self.inputs['ticker_id'])
-        if not zones_data:
-            print(f"⚠ Warning: No levels_zones data found for {self.inputs['ticker_id']}")
-            proceed = input("Continue anyway? (y/n): ").strip().lower()
-            if proceed != 'y':
-                return
-        else:
-            print(f"✓ Found levels_zones data for {self.inputs['ticker_id']}")
         
         # Create trade record
         trade, validation = self.handler.create_trade_record(
@@ -561,7 +587,15 @@ class CLITradeEntry:
 
 if __name__ == "__main__":
     try:
-        cli = CLITradeEntry()
+        # Ask about debug mode before creating the CLI instance
+        print("\n" + "="*60)
+        print("BACKTEST TRADE ENTRY SYSTEM")
+        print("="*60)
+        debug_input = input("Enable debug mode? (y/n): ").strip().lower()
+        debug_mode = (debug_input == 'y')
+        
+        # Create CLI with debug mode setting
+        cli = CLITradeEntry(debug_mode=debug_mode)
         cli.run()
     except KeyboardInterrupt:
         print("\n\nExiting...")

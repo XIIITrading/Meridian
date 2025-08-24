@@ -67,7 +67,12 @@ class TradeManager:
         print("LAUNCHING TRADE ENTRY SYSTEM")
         print("="*70)
         
-        cli = CLITradeEntry()
+        # Ask about debug mode
+        debug_input = input("Enable debug mode? (y/n): ").strip().lower()
+        debug_mode = (debug_input == 'y')
+        
+        # Create CLI with debug mode setting
+        cli = CLITradeEntry(debug_mode=debug_mode)
         cli.run()
     
     def list_trades(self, ticker=None, session_id=None):

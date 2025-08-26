@@ -1,1 +1,0 @@
-"""Calculation modules for Meridian Trading System"""

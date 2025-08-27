@@ -1,0 +1,114 @@
+Purpose: 
+
+The purpose of this system is to automate the selection of M15 zones, run confluence analysis outlining significant areas of metric overlap, and refining final areas of significance to monitor during the trading day.
+
+Protocol:
+
+Step 1: Fractal Engine
+- Levels & Zones Engine will initialize with the fractal_engine as the starting point for the workflow. 
+- The fractal_engine will take the user enteres ticker, date, and time to pull 90-Days of 15-Minute bar data and cache.
+- The fractal_engine will then take the fractal_length and move from the right most candle stick to the first available bar given the fractal_length
+- The system will then look the total bar cound via fractal length to the left and the right, then analyze if the current candle is has the highest or lowest price in that separation
+- If the bar contains the highest or lowest price in the fractal_length span it will be designated as a fractal high or low
+    - After being designated a fractal_high or fractal_low the high and low of the bar will be pulled from the 15-Minute database
+    - The high and low of these candles will serve as a zone where any additional candles that are designated fractal_high or fractal_low must not overlap
+        - This overlap check allows for unique zones to be created within the analysis box so that there is actionable trading signals
+- If the bar does not contain the highest or lowest price in the fractal_length span then the system will move to the next bar left
+- Once a fractal_high or fractal_low are determined, the next fractal_high or fractal_low will be identified through the zig-zag pattern
+    - If the price of the new fractal_high or fractal_low is within the high/low zone of a previous fractal_high or fractal_low then it is ignored and the system moves to the next left bar
+    - If the price of the new fractal_high or fractal_low is outside the high/low zone of a previous fractal_high or fractal_low then it is added to the list of valid_fractals and the high and low zone is determined and added. 
+- This cycle will continue through the prior candles until the 90 days has been analyzed
+
+Step 2: Confluence Engine
+- The confluence engine discovers high-probability trading zones by finding areas where multiple technical indicators converge, then validates these zones using 15-minute (M15) candle data.
+- The first step of this engine is to calculate key metrics
+    - Daily ATR (14-period Average True Range)
+    - 15-minute ATR (for zone sizing)
+    - 5-minute ATR (for precision)
+    - ADR (Average Daily Range as percentage)
+    - Current price, daily high/low/open
+- Define active_range which is the high and low price represented between 2x Daily ATR from the current price at time of data pull
+    - This range willl provide the initial filter for valid fractal_high and fractal_low zones in next step
+    - If any price within the high / low of the fractal_high or fractal_low is within the active_range then it is a valid_fractal
+- Calculate multiple Confluence Sources
+    - HVN (High Volume Node) Analysis
+        - Build volume profiles for 7, 14, and 30-day timeframes
+        - Divides price range into 100 levels
+        - Identifies volume peaks (areas of high trading activity)
+        - Ranks peaks by volume percentage
+    - Camarilla Pivots
+       - Calculates mathematical support/resistance levels
+       - Three timeframes: Daily, Weekly, Monthly
+       - Key levels: R6, R5, R4, R3, S3, S4, S5, S6
+       - Based on previous period's high/low/close
+    - Monthly, Weekly, and Daily Levels
+        - Manual Levels Integration
+            - User will manually enter 4 levels respectively for Weekly and Daily
+            - The tool will then convert these into zones using ATR-based widths +/-
+    - ATR Zones
+        - Creates dynamic volatility-based zones
+            - ATR High Zone: current_price + daily_atr ± 5min_atr
+            - ATR Low Zone: current_price - daily_atr ± 5min_atr
+    - Market Structure Levels
+        - Tool will pull the below metrics and create zones based on level_price + 5m_atr (high) and level_price - 5m_atr (low)
+            - Previous Day High (pdh)
+            - Previous Dy Low (pdl)
+            - Previous Day Close (pdc)
+            - Overnight High (20:00 previous day to time of data pull) (onh)
+            - Overnight Low (20:00 previous day to time of data pull) (onl)
+- All of these zones will be stored in cache to be used in the next step
+
+Step 3: Zone Filter
+- The zone filter will take the results from the fractal_engine and analzye whether any price between a candles high and low for a fractal_high and fractal low is within the active_range
+- The active_range price boudns are defined as
+    - current_price + 2x daily_atr = active_zone_high
+    - current_price - 2x daily_atr = active_zone_low
+- If fractal_high or fractal_low candle has a price between it's high and low that is within the active_range then it can be determined an active_candle
+
+Step 4: Zone Discovery Process
+- The engine identifies zones where multiple indicators cluster
+- Clustering algorythm
+    - Groups nearby confluence items (within 1.5x M15 ATR)
+    - Each item has a weight based on its type
+       -  Confluence Scoring:
+                pythonconfluence_weights = {
+                'hvn-30d': 3.0,      # Highest weight for 30-day volume
+                'cam-monthly': 3.0,   # Monthly pivots
+                'cam-weekly': 2.5,    # Weekly pivots
+                'weekly': 2.5,        # Weekly levels
+                'hvn-14d': 2.5,      # 14-day volume
+                'hvn-7d': 2.0,       # 7-day volume
+                'atr': 1.5,          # ATR zones
+                'daily-zone': 1.5,   # Daily zones
+                'cam-daily': 1.5,    # Daily pivots
+                'daily-level': 1.0   # Individual daily levels
+            }
+
+- Zone Creation:
+    - Calculates weighted center of cluster
+    - Sets zone width (capped at 3x M15 ATR)
+    - Assigns confluence level (L1-L5 based on score)
+
+Step 5: M15 Zone Analysis & Selection
+- This step will outline an algorithm that will compare the high confluence zones determined in the above step and compare to the high/low prices of the fractal_high and fractal_low that are designated active_candle to the high_confluence_zones
+- If there is at least 25% overlap then the active_candle inherets the confluence_level of the zone and is displayed in the final results
+
+Step 6: Final Results
+- 6 active_candles will be presented as results (3 above current_price and 3 below current_price) with levels > L3
+- These will display the below metrics
+    - Date Time
+    - high_price
+    - low_rpice
+    - Confluence check mark in table if that particular conflunece metric is seen.
+        - 30-Day HVN
+        - 14-Day HVN
+        - 7-Day HVN
+        - Monthly Camarilla Pivot
+        - Weekly Camarilla Pivot
+        - Daily Camarilla Pivot
+        - ATR Zone
+        - PDC
+        - PDH
+        - PDL
+        - ONH
+        - ONL

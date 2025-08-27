@@ -1,12 +1,12 @@
 {
   "requests_per_minute": 900,
   "requests_today": 900,
-  "last_reset_time": "2025-08-22T12:45:43.431619+00:00",
-  "total_requests": 17400,
+  "last_reset_time": "2025-08-27T12:03:08.488229+00:00",
+  "total_requests": 18300,
   "rate_limit_hits": 0,
-  "average_response_time": 0.121,
+  "average_response_time": 0.116,
   "total_wait_time": 0.0,
-  "successful_requests": 17314,
+  "successful_requests": 18214,
   "failed_requests": 86,
-  "success_rate": 99.51
+  "success_rate": 99.53
 }

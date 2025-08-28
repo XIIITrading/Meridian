@@ -1,0 +1,5 @@
+python confluence_cli.py TSLA 2025-08-28 12:30 `
+    -w 354.91 335.00 315.55 286.03 `
+    -d 365.36 340.45 334.34 319.51 `
+    --output json `
+    --save-file tsla_analysis.json

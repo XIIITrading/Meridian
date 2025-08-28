@@ -1,0 +1,130 @@
+{
+  "metadata": {
+    "symbol": "AAPL",
+    "analysis_time": "2025-08-28T14:30:00+00:00",
+    "current_price": 100.0,
+    "parameters": {
+      "fractal_length": 11,
+      "atr_distance": 1.0,
+      "lookback_days": 30,
+      "merge_mode": "overlap",
+      "weekly_levels": [
+        450.0,
+        445.0,
+        440.0,
+        435.0
+      ],
+      "daily_levels": [
+        452.0,
+        448.0,
+        446.0,
+        444.0
+      ]
+    },
+    "metrics": {
+      "atr_daily": 4.2417826481384635,
+      "atr_15min": 0.38808531602844215,
+      "adr_percent": 2.2995943282114175
+    }
+  },
+  "statistics": {
+    "total_fractals": 41,
+    "confluence_zones": 7,
+    "trading_levels": 3,
+    "confluence_sources": 7
+  },
+  "trading_levels": [
+    {
+      "rank": 1,
+      "datetime": "2025-08-28T12:06:26.360958",
+      "type": "zone_resistance",
+      "high_price": 229.95425,
+      "low_price": 229.35424999999998,
+      "confluence_level": "L5",
+      "confluence_score": 92.8261764380038,
+      "distance_pct": 129.65425,
+      "priority_score": 111.39141172560456,
+      "direction": "resistance",
+      "confluence_factors": {
+        "has_hvn": true,
+        "has_camarilla": true,
+        "has_weekly": false,
+        "has_daily": false,
+        "has_atr": true,
+        "has_multiple_timeframes": true
+      }
+    }
+  ],
+  "confluence_zones": [
+    {
+      "zone_id": 2,
+      "high": 233.3885,
+      "low": 225.92,
+      "center": 229.21454982184588,
+      "confluence_level": "L5",
+      "confluence_score": 92.8261764380038,
+      "source_count": 54,
+      "zone_type": "support"
+    },
+    {
+      "zone_id": 3,
+      "high": 235.11827132900711,
+      "low": 233.77,
+      "center": 234.57091666666668,
+      "confluence_level": "L2",
+      "confluence_score": 7.199999999999999,
+      "source_count": 5,
+      "zone_type": "resistance"
+    },
+    {
+      "zone_id": 6,
+      "high": 239.22655197936578,
+      "low": 239.03250932135157,
+      "center": 239.12953065035867,
+      "confluence_level": "L1",
+      "confluence_score": 5.28,
+      "source_count": 2,
+      "zone_type": "resistance"
+    },
+    {
+      "zone_id": 5,
+      "high": 237.40766796416693,
+      "low": 236.63149733211003,
+      "center": 236.92561060402343,
+      "confluence_level": "L1",
+      "confluence_score": 5.279999999999999,
+      "source_count": 3,
+      "zone_type": "resistance"
+    },
+    {
+      "zone_id": 4,
+      "high": 234.6123088095316,
+      "low": 234.5346917463259,
+      "center": 234.57350027792873,
+      "confluence_level": "L0",
+      "confluence_score": 2.4,
+      "source_count": 1,
+      "zone_type": "resistance"
+    },
+    {
+      "zone_id": 0,
+      "high": 225.4799,
+      "low": 224.66,
+      "center": 224.97,
+      "confluence_level": "L1",
+      "confluence_score": 0.8800000000000001,
+      "source_count": 2,
+      "zone_type": "support"
+    },
+    {
+      "zone_id": 1,
+      "high": 225.69,
+      "low": 225.5,
+      "center": 225.5,
+      "confluence_level": "L0",
+      "confluence_score": 0.4,
+      "source_count": 1,
+      "zone_type": "support"
+    }
+  ]
+}

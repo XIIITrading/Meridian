@@ -1,0 +1,97 @@
+{
+  "symbol": "TSLA",
+  "analysis_time": "2025-08-28T12:30:00+00:00",
+  "current_price": 350.0,
+  "parameters": {
+    "weekly_levels": [
+      354.91,
+      335.0,
+      315.55,
+      286.03
+    ],
+    "daily_levels": [
+      365.36,
+      340.45,
+      334.34,
+      319.51
+    ],
+    "fractal_length": 11,
+    "atr_distance": 1.0,
+    "lookback_days": 30,
+    "merge_mode": "overlap"
+  },
+  "metrics": {
+    "atr_daily": 11.012458694414173,
+    "atr_15min": 2.03719014033754
+  },
+  "statistics": {
+    "total_fractals": 17,
+    "confluence_zones": 14,
+    "trading_levels": 7
+  },
+  "levels": [
+    {
+      "low": 345.44,
+      "high": 345.75,
+      "confluence": "L5",
+      "score": 17.79603331494638,
+      "distance_pct": 1.2142857142857142,
+      "type": "high",
+      "priority": 33.43111972736356
+    },
+    {
+      "low": 350.85,
+      "high": 351.5,
+      "confluence": "L4",
+      "score": 14.365867627664827,
+      "distance_pct": 0.24285714285714935,
+      "type": "low",
+      "priority": 28.382849898657785
+    },
+    {
+      "low": 356.31145046336667,
+      "high": 356.9114504633667,
+      "confluence": "L3",
+      "score": 12.88,
+      "distance_pct": 1.888985846676194,
+      "type": "zone_resistance",
+      "priority": 27.992383475377274
+    },
+    {
+      "low": 338.77,
+      "high": 341.9,
+      "confluence": "L4",
+      "score": 14.107553588900267,
+      "distance_pct": 2.3142857142857207,
+      "type": "high",
+      "priority": 24.950216204369323
+    },
+    {
+      "low": 334.8418413055858,
+      "high": 335.4418413055858,
+      "confluence": "L4",
+      "score": 12.644013663603952,
+      "distance_pct": 4.245188198404061,
+      "type": "zone_support",
+      "priority": 23.904486682426537
+    },
+    {
+      "low": 360.0368723621016,
+      "high": 360.6368723621016,
+      "confluence": "L1",
+      "score": 5.28,
+      "distance_pct": 2.9533921034575963,
+      "type": "zone_resistance",
+      "priority": 10.800730763249266
+    },
+    {
+      "low": 343.91,
+      "high": 344.7,
+      "confluence": "L0",
+      "score": 0.4,
+      "distance_pct": 1.7399999999999929,
+      "type": "low",
+      "priority": 0.7304000000000004
+    }
+  ]
+}

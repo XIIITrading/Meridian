@@ -1,4 +1,4 @@
-# scanner/zone_scanner.py - Complete with M15 candle details and fractal integration
+# scanner/zone_scanner.py - Complete with M15 candle details, fractal integration, and market structure levels
 
 import logging
 from typing import Dict, Optional, List
@@ -14,12 +14,13 @@ from ..calculations.pivots.camarilla_engine import CamarillaEngine
 from ..calculations.zones.weekly_zone_calc import WeeklyZoneCalculator
 from ..calculations.zones.daily_zone_calc import DailyZoneCalculator
 from ..calculations.zones.atr_zone_calc import ATRZoneCalculator
+from ..calculations.market_structure import MarketStructureCalculator
 
 logger = logging.getLogger(__name__)
 
 
 class ZoneScanner:
-    """Main scanner using complete calculation engine"""
+    """Main scanner using complete calculation engine with market structure integration"""
     
     def __init__(self, polygon_client: Optional[PolygonClient] = None):
         self.polygon_client = polygon_client or PolygonClient(
@@ -34,6 +35,7 @@ class ZoneScanner:
         self.weekly_calc = WeeklyZoneCalculator()
         self.daily_calc = DailyZoneCalculator()
         self.atr_calc = ATRZoneCalculator()
+        self.market_structure_calc = MarketStructureCalculator()
         
         # ================================================================
         # ZONE WIDTH CONFIGURATION - All multipliers in one place
@@ -58,6 +60,9 @@ class ZoneScanner:
         # ATR Zone Width
         self.atr_zone_multiplier = 1.0
         
+        # Market Structure Zone Width (uses 5-min ATR equivalent)
+        self.market_structure_multiplier = 0.15  # 5-min ATR approximation as % of 15-min ATR
+        
         # Daily Level Width (for DL items - essentially points)
         self.daily_level_width = 0.1  
         
@@ -75,7 +80,7 @@ class ZoneScanner:
         
         # ================================================================
         
-        logger.info("Zone Scanner initialized with complete calculation engine")
+        logger.info("Zone Scanner initialized with complete calculation engine including market structure")
     
     def initialize(self):
         """Test connection"""
@@ -146,7 +151,7 @@ class ZoneScanner:
              merge_identical: bool = None,
              **kwargs):
         """
-        Run scan with full confluence engine
+        Run scan with full confluence engine including market structure
         
         Args:
             ticker: Stock symbol
@@ -171,7 +176,7 @@ class ZoneScanner:
         
         logger.info(f"Starting full confluence scan for {ticker}")
         
-        # Calculate metrics
+        # Calculate basic metrics first
         metrics = self.metrics_calculator.calculate_metrics(ticker, analysis_datetime)
         if not metrics:
             return {"error": "Failed to calculate metrics"}
@@ -179,6 +184,8 @@ class ZoneScanner:
         # Use configured scan range
         scan_low = metrics.current_price - (self.scan_range_atr_multiplier * metrics.atr_daily)
         scan_high = metrics.current_price + (self.scan_range_atr_multiplier * metrics.atr_daily)
+        
+        logger.info(f"Scan range: ${scan_low:.2f} - ${scan_high:.2f}")
         
         # Collect ALL confluence items in a single list
         all_confluence_items = []
@@ -206,8 +213,13 @@ class ZoneScanner:
                     all_confluence_items.extend(hvn_formatted)
                     source_counts['hvn_peaks'] = len(hvn_formatted)
                     logger.info(f"Added {len(hvn_formatted)} formatted HVN peaks")
+                else:
+                    source_counts['hvn_peaks'] = 0
+            else:
+                source_counts['hvn_peaks'] = 0
         except Exception as e:
             logger.error(f"HVN calculation failed: {e}")
+            source_counts['hvn_peaks'] = 0
         
         # 2. CAMARILLA PIVOTS
         try:
@@ -237,8 +249,13 @@ class ZoneScanner:
                     all_confluence_items.extend(cam_formatted)
                     source_counts['camarilla_pivots'] = len(cam_formatted)
                     logger.info(f"Added {len(cam_formatted)} formatted Camarilla pivots")
+                else:
+                    source_counts['camarilla_pivots'] = 0
+            else:
+                source_counts['camarilla_pivots'] = 0
         except Exception as e:
             logger.error(f"Camarilla calculation failed: {e}")
+            source_counts['camarilla_pivots'] = 0
         
         # 3. WEEKLY ZONES
         if weekly_levels:
@@ -256,6 +273,8 @@ class ZoneScanner:
                     weekly_count += 1
             source_counts['weekly_zones'] = weekly_count
             logger.info(f"Added {weekly_count} weekly zones")
+        else:
+            source_counts['weekly_zones'] = 0
         
         # 4. DAILY LEVELS
         if daily_levels:
@@ -272,6 +291,8 @@ class ZoneScanner:
                     daily_level_count += 1
             source_counts['daily_levels'] = daily_level_count
             logger.info(f"Added {daily_level_count} daily levels")
+        else:
+            source_counts['daily_levels'] = 0
         
         # 5. DAILY ZONES
         if daily_levels:
@@ -289,6 +310,8 @@ class ZoneScanner:
                     daily_zone_count += 1
             source_counts['daily_zones'] = daily_zone_count
             logger.info(f"Added {daily_zone_count} daily zones")
+        else:
+            source_counts['daily_zones'] = 0
         
         # 6. ATR ZONES
         try:
@@ -321,8 +344,58 @@ class ZoneScanner:
             logger.info(f"Added {atr_count} ATR zones")
         except Exception as e:
             logger.error(f"ATR zones failed: {e}")
+            source_counts['atr_zones'] = 0
         
-        # 7. ADDITIONAL CONFLUENCE (e.g., FRACTALS)
+        # 7. MARKET STRUCTURE LEVELS (PDH, PDL, PDC, ONH, ONL) - ENHANCED INTEGRATION
+        try:
+            logger.info("Calculating market structure levels...")
+            
+            # Calculate enhanced metrics with market structure
+            enhanced_metrics = self.metrics_calculator.calculate_metrics(
+                ticker, analysis_datetime, include_market_structure=True
+            )
+            
+            if enhanced_metrics and enhanced_metrics.has_structure_levels():
+                # Update our main metrics object with structure levels
+                structure_levels = enhanced_metrics.get_structure_levels()
+                metrics.update_market_structure(structure_levels)
+                
+                logger.info(f"Market structure levels calculated: {list(structure_levels.keys())}")
+                
+                # Format for confluence using 5-minute ATR zones
+                atr_5min = metrics.atr_m15 * self.market_structure_multiplier
+                
+                structure_formatted = self.market_structure_calc.format_for_confluence(
+                    structure_levels, atr_5min
+                )
+                
+                # Filter to scan range and add to confluence items
+                structure_count = 0
+                for item in structure_formatted:
+                    if scan_low <= item['level'] <= scan_high:
+                        all_confluence_items.append(item)
+                        structure_count += 1
+                        logger.info(f"Added {item['name']} at ${item['level']:.2f} to confluence")
+                
+                source_counts['market_structure'] = structure_count
+                logger.info(f"Added {structure_count} market structure levels to confluence")
+                
+                # Log all calculated levels for debugging
+                for name, value in structure_levels.items():
+                    in_range = "in range" if scan_low <= value <= scan_high else "out of range"
+                    logger.info(f"  {name}: ${value:.2f} ({in_range})")
+                    
+            else:
+                logger.warning("No market structure levels calculated - check data availability")
+                source_counts['market_structure'] = 0
+                
+        except Exception as e:
+            logger.error(f"Market structure calculation failed: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            source_counts['market_structure'] = 0
+        
+        # 8. ADDITIONAL CONFLUENCE (e.g., FRACTALS)
         if additional_confluence:
             for source_type, items in additional_confluence.items():
                 if items and isinstance(items, list):
@@ -336,6 +409,8 @@ class ZoneScanner:
                         all_confluence_items.extend(filtered_items)
                         source_counts[source_type] = len(filtered_items)
                         logger.info(f"Added {len(filtered_items)} {source_type} items from additional confluence")
+                    else:
+                        source_counts[source_type] = 0
         
         logger.info(f"Total confluence items: {len(all_confluence_items)}")
         
@@ -347,6 +422,9 @@ class ZoneScanner:
                 confluence_sources[item_type] = []
             confluence_sources[item_type].append(item)
         
+        # Set merge mode on discovery engine
+        self.discovery_engine.set_merge_mode(merge_overlapping, merge_identical)
+        
         # Run zone discovery
         zones = self.discovery_engine.discover_zones(
             scan_low=scan_low,
@@ -356,7 +434,7 @@ class ZoneScanner:
             confluence_sources=confluence_sources
         )
         
-        logger.info(f"Discovered {len(zones)} zones with full confluence")
+        logger.info(f"Discovered {len(zones)} zones with full confluence including market structure")
         
         return {
             "symbol": ticker,
@@ -369,7 +447,7 @@ class ZoneScanner:
         }
     
     def format_result(self, result: Dict) -> str:
-        """Format scan results for display"""
+        """Format scan results for display with market structure"""
         if 'error' in result:
             return f"Error: {result['error']}"
         
@@ -385,13 +463,30 @@ class ZoneScanner:
             output.append(f"  Current Price: ${m['current_price']:.2f}")
             output.append(f"  Daily ATR: ${m['atr_daily']:.2f}")
             output.append(f"  M15 ATR: ${m['atr_m15']:.2f}")
+            
+            # Add market structure levels if present
+            structure_levels = {}
+            for level_name in ['PDH', 'PDL', 'PDC', 'ONH', 'ONL']:
+                if level_name in m and m[level_name] is not None:
+                    structure_levels[level_name] = m[level_name]
+            
+            if structure_levels:
+                output.append(f"\nMarket Structure Levels:")
+                for level_name in ['PDH', 'PDL', 'PDC', 'ONH', 'ONL']:
+                    if level_name in structure_levels:
+                        output.append(f"  {level_name}: ${structure_levels[level_name]:.2f}")
+            
+            if m.get('market_structure_available', False):
+                output.append(f"  Structure levels available: {m.get('structure_level_count', 0)}")
         
         # Confluence sources
         if 'confluence_counts' in result:
             output.append(f"\nConfluence Sources ({result.get('total_confluence_items', 0)} total items):")
             for source, count in result['confluence_counts'].items():
                 if count > 0:
-                    output.append(f"  ✓ {source}: {count} items")
+                    # Add special indicator for market structure
+                    indicator = "📊" if source == 'market_structure' else "✓"
+                    output.append(f"  {indicator} {source}: {count} items")
         
         # Zones
         if 'zones' in result:
@@ -407,5 +502,13 @@ class ZoneScanner:
                     output.append(f"    Level: {zone.confluence_level} (Score: {zone.confluence_score:.1f})")
                     output.append(f"    Sources: {len(zone.confluent_sources)}")
                     output.append(f"    Distance: {zone.distance_percentage:.1f}%")
+                    
+                    # Show if zone contains market structure
+                    has_ms = any('market-structure' in str(s.get('type', '')) 
+                               for s in zone.confluent_sources)
+                    if has_ms:
+                        ms_names = [s.get('name', '') for s in zone.confluent_sources 
+                                   if s.get('type') == 'market-structure']
+                        output.append(f"    📊 Market Structure: {', '.join(ms_names)}")
         
         return "\n".join(output)

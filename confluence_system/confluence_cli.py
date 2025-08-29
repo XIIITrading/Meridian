@@ -106,6 +106,28 @@ def parse_arguments():
         help='Show detailed progress information'
     )
     
+    # HVN POC Mode arguments
+    parser.add_argument(
+        '--hvn-poc-mode',
+        action='store_true',
+        default=True,
+        help='Use HVN POC anchoring mode (default: True)'
+    )
+    
+    parser.add_argument(
+        '--no-hvn-poc-mode',
+        action='store_false',
+        dest='hvn_poc_mode',
+        help='Disable HVN POC mode and use traditional clustering'
+    )
+    
+    parser.add_argument(
+        '--hvn-zone-width',
+        type=float,
+        default=0.5,
+        help='HVN zone width as multiplier of M15 ATR (default: 0.5 for half ATR)'
+    )
+    
     return parser.parse_args()
 
 
@@ -289,7 +311,9 @@ def run_analysis(args) -> Dict:
         daily_levels=args.daily_levels,
         lookback_days=args.lookback,
         merge_overlapping=merge_overlapping,
-        merge_identical=merge_identical
+        merge_identical=merge_identical,
+        use_hvn_poc_mode=args.hvn_poc_mode,
+        hvn_zone_width_multiplier=args.hvn_zone_width
     )
     
     if args.verbose:
@@ -305,26 +329,59 @@ def run_analysis(args) -> Dict:
             if level in level_counts:
                 print(f"  {level}: {level_counts[level]} zones")
     
-    # 3. ZONE IDENTIFICATION - EXACTLY like test file
+    # 3. ZONE IDENTIFICATION - Skip for POC mode to preserve zone widths
     if args.verbose:
         print("\n" + "="*40)
-        print("IDENTIFYING TRADING LEVELS")
+        if args.hvn_poc_mode:
+            print("USING POC ZONES DIRECTLY (NO TRANSFORMATION)")
+        else:
+            print("IDENTIFYING TRADING LEVELS")
         print("="*40)
     
-    zone_id_orch = ZoneIdentificationOrchestrator()
-    zone_id_orch.initialize(current_price)
-    
-    atr_daily = confluence_result.metrics['atr_daily']
-    atr_filter = atr_daily * 2
-    
-    trading_levels = zone_id_orch.identify_trading_levels(
-        fractal_data=fractal_results,
-        confluence_zones=confluence_result.zones,
-        atr_filter=atr_filter
-    )
-    
-    if args.verbose:
-        print(f"Identified {len(trading_levels)} trading levels")
+    # Skip zone identification for POC mode - use zones directly
+    if args.hvn_poc_mode:
+        # Convert POC zones directly to trading levels format
+        trading_levels = []
+        for zone in confluence_result.zones:
+            # Create a simple object that mimics the trading level interface
+            class DirectZoneLevel:
+                def __init__(self, zone):
+                    self.low_price = zone.zone_low
+                    self.high_price = zone.zone_high
+                    self.confluence_level = zone.confluence_level
+                    self.confluence_score = zone.confluence_score
+                    self.distance_percentage = zone.distance_percentage
+                    self.fractal_type = zone.zone_type
+                    self.priority_score = zone.confluence_score * (10 - abs(zone.distance_percentage))
+                    self.confluent_sources = zone.confluent_sources
+                    self.overlapping_zones = [{'zone_sources': zone.confluent_sources}]
+                    # Flags for compatibility
+                    self.has_hvn = any('hvn' in s.get('type', '') for s in zone.confluent_sources)
+                    self.has_camarilla = any('cam' in s.get('type', '') for s in zone.confluent_sources)
+                    self.has_weekly = any('weekly' in s.get('type', '') for s in zone.confluent_sources)
+                    self.has_daily = any('daily' in s.get('type', '') for s in zone.confluent_sources)
+                    self.has_atr = any('atr' in s.get('type', '') for s in zone.confluent_sources)
+            
+            trading_levels.append(DirectZoneLevel(zone))
+        
+        if args.verbose:
+            print(f"Using {len(trading_levels)} POC zones directly")
+    else:
+        # Run traditional zone identification for clustering mode
+        zone_id_orch = ZoneIdentificationOrchestrator()
+        zone_id_orch.initialize(current_price)
+        
+        atr_daily = confluence_result.metrics['atr_daily']
+        atr_filter = atr_daily * 2
+        
+        trading_levels = zone_id_orch.identify_trading_levels(
+            fractal_data=fractal_results,
+            confluence_zones=confluence_result.zones,
+            atr_filter=atr_filter
+        )
+        
+        if args.verbose:
+            print(f"Identified {len(trading_levels)} trading levels")
     
     # Prepare output data - EXACTLY like test file
     output_data = {
@@ -337,7 +394,9 @@ def run_analysis(args) -> Dict:
             'fractal_length': args.fractal_length,
             'atr_distance': args.atr_distance,
             'lookback_days': args.lookback,
-            'merge_mode': args.merge_mode
+            'merge_mode': args.merge_mode,
+            'use_hvn_poc_mode': args.hvn_poc_mode,
+            'hvn_zone_width_multiplier': args.hvn_zone_width
         },
         'metrics': {
             'atr_daily': confluence_result.metrics.get('atr_daily', 0),
@@ -380,6 +439,15 @@ def display_terminal_output(results: Dict):
     print(f"Current Price: ${results['current_price']:.2f}")
     print(f"ATR Daily: ${results['metrics']['atr_daily']:.2f}")
     print(f"ATR 15min: ${results['metrics']['atr_15min']:.2f}")
+    
+    # Display HVN POC mode information
+    if results['parameters'].get('use_hvn_poc_mode', False):
+        print(f"\nHVN POC Anchor Mode:")
+        print(f"  Zone Width: {results['parameters'].get('hvn_zone_width_multiplier', 0.3)}x M15 ATR")
+        print(f"  Mode: POC Anchoring (zones built around HVN points of control)")
+    else:
+        print(f"\nTraditional Clustering Mode:")
+        print(f"  Mode: Confluence clustering (zones built from overlapping levels)")
     
     print(f"\nStatistics:")
     print(f"  Fractals: {results['statistics']['total_fractals']}")

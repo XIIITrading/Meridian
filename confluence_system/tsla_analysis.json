@@ -18,7 +18,9 @@
     "fractal_length": 11,
     "atr_distance": 1.0,
     "lookback_days": 30,
-    "merge_mode": "overlap"
+    "merge_mode": "overlap",
+    "use_hvn_poc_mode": true,
+    "hvn_zone_width_multiplier": 1.0
   },
   "metrics": {
     "atr_daily": 11.012458694414173,
@@ -26,145 +28,117 @@
   },
   "statistics": {
     "total_fractals": 17,
-    "confluence_zones": 18,
-    "trading_levels": 8
+    "confluence_zones": 6,
+    "trading_levels": 6
   },
   "levels": [
     {
-      "low": 350.85,
-      "high": 351.5,
+      "low": 334.58825492983124,
+      "high": 336.6254450701688,
       "confluence": "L5",
-      "score": 16.623734354393882,
-      "distance_pct": 0.24285714285714935,
-      "type": "low",
-      "priority": 32.843749445895334,
+      "score": 12.35,
+      "distance_pct": 1.2005681734548166,
+      "type": "support",
+      "priority": 108.67298305783301,
       "confluence_sources": [
-        "PDC",
-        "HVN_7D",
-        "Weekly_Cam",
-        "Monthly_Cam",
-        "ONH",
-        "FractalLow_0827_0845",
-        "HVN_30D",
-        "HVN_14D",
-        "Daily_Cam"
-      ],
-      "source_count": 9
-    },
-    {
-      "low": 334.4375413055858,
-      "high": 335.0375413055858,
-      "confluence": "L4",
-      "score": 12.644013663603952,
-      "distance_pct": 4.360702484118341,
-      "type": "zone_support",
-      "priority": 23.729218977597,
-      "confluence_sources": [
-        "Daily_Level",
-        "Daily_Zone",
-        "ATR_Zone",
+        "hvn_poc_14d_10",
         "Weekly_Cam",
         "Monthly_Cam",
         "Weekly_Zone",
-        "HVN_30D",
-        "HVN_14D"
-      ],
-      "source_count": 8
-    },
-    {
-      "low": 356.0455268822915,
-      "high": 356.6455268822915,
-      "confluence": "L3",
-      "score": 10.799999999999999,
-      "distance_pct": 1.8130076806547126,
-      "type": "zone_resistance",
-      "priority": 23.570342045871488,
-      "confluence_sources": [
-        "Weekly_Zone",
-        "Weekly_Cam",
-        "Monthly_Cam",
-        "PDH",
-        "Daily_Cam",
-        "ATR_Zone"
-      ],
-      "source_count": 6
-    },
-    {
-      "low": 347.59401549298315,
-      "high": 348.19401549298317,
-      "confluence": "L3",
-      "score": 9.817647639311398,
-      "distance_pct": 0.6017098591476692,
-      "type": "zone_support",
-      "priority": 22.85346928896197,
-      "confluence_sources": [
-        "Weekly_Cam",
-        "Monthly_Cam",
-        "Daily_Cam",
-        "HVN_7D",
-        "HVN_30D",
-        "HVN_14D"
-      ],
-      "source_count": 6
-    },
-    {
-      "low": 338.77,
-      "high": 341.9,
-      "confluence": "L3",
-      "score": 12.32,
-      "distance_pct": 2.3142857142857207,
-      "type": "high",
-      "priority": 21.788799999999995,
-      "confluence_sources": [
-        "Weekly_Cam",
-        "Monthly_Cam",
-        "Daily_Cam",
-        "Daily_Zone",
-        "FractalHigh_0825_0800"
+        "Daily_Zone"
       ],
       "source_count": 5
     },
     {
-      "low": 360.0368723621016,
-      "high": 360.6368723621016,
-      "confluence": "L1",
-      "score": 5.28,
-      "distance_pct": 2.9533921034575963,
-      "type": "zone_resistance",
-      "priority": 10.800730763249266,
+      "low": 348.9498549298312,
+      "high": 350.98704507016873,
+      "confluence": "L5",
+      "score": 15.260000000000002,
+      "distance_pct": 3.0273488673329583,
+      "type": "resistance",
+      "priority": 106.40265628449907,
       "confluence_sources": [
+        "hvn_poc_7d_6",
+        "Weekly_Cam",
+        "Monthly_Cam",
+        "ATR_Zone",
+        "PDL",
+        "PDC",
+        "ONH",
+        "FractalLow_0827_0845"
+      ],
+      "source_count": 8
+    },
+    {
+      "low": 337.35895492983127,
+      "high": 339.3961450701688,
+      "confluence": "L4",
+      "score": 9.0,
+      "distance_pct": 0.38490071684059063,
+      "type": "support",
+      "priority": 86.53589354843469,
+      "confluence_sources": [
+        "hvn_poc_7d_11",
+        "Weekly_Cam",
+        "Monthly_Cam",
+        "FractalHigh_0825_0800"
+      ],
+      "source_count": 4
+    },
+    {
+      "low": 344.4630549298312,
+      "high": 346.5002450701687,
+      "confluence": "L4",
+      "score": 8.84,
+      "distance_pct": 1.7064780605560868,
+      "type": "resistance",
+      "priority": 73.31473394468419,
+      "confluence_sources": [
+        "hvn_poc_7d_4",
+        "Daily_Cam",
+        "ONL",
+        "FractalHigh_0826_1030",
+        "FractalLow_0826_0800"
+      ],
+      "source_count": 5
+    },
+    {
+      "low": 346.3325549298312,
+      "high": 348.36974507016873,
+      "confluence": "L4",
+      "score": 9.0,
+      "distance_pct": 2.2568408967131193,
+      "type": "resistance",
+      "priority": 69.68843192958192,
+      "confluence_sources": [
+        "hvn_poc_7d_8",
+        "Daily_Cam",
         "Weekly_Cam",
         "Monthly_Cam"
       ],
-      "source_count": 2
+      "source_count": 4
     },
     {
-      "low": 345.44,
-      "high": 345.75,
-      "confluence": "L1",
-      "score": 2.3306289266312996,
-      "distance_pct": 1.2142857142857142,
-      "type": "high",
-      "priority": 4.378252912171655,
+      "low": 320.31175492983124,
+      "high": 322.3489450701688,
+      "confluence": "L5",
+      "score": 13.200000000000001,
+      "distance_pct": 5.403432591960196,
+      "type": "support",
+      "priority": 60.67468978612542,
       "confluence_sources": [
-        "ONL",
-        "HVN_7D",
-        "FractalHigh_0826_1030"
+        "hvn_poc_14d_8",
+        "FractalHigh_0729_1915",
+        "FractalHigh_0730_1200",
+        "FractalHigh_0807_0800",
+        "FractalHigh_0807_2000",
+        "FractalHigh_0808_1130",
+        "FractalLow_0729_1415",
+        "FractalLow_0729_2345",
+        "FractalLow_0808_0800",
+        "FractalLow_0821_1300"
       ],
-      "source_count": 3
-    },
-    {
-      "low": 343.91,
-      "high": 344.7,
-      "confluence": "L0",
-      "score": 0.4,
-      "distance_pct": 1.7399999999999929,
-      "type": "low",
-      "priority": 0.7304000000000004,
-      "confluence_sources": [
-        "FractalLow_0826_0800"
-      ],
-      "source_count": 1
+      "source_count": 10
     }
   ]
 }

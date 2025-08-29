@@ -66,6 +66,46 @@ class ScannerConfig:
         'L1': 0.0
     }
 
+# ================================
+# HVN POC Anchor Mode Configuration
+# ================================
+
+# Enable HVN POC anchoring by default
+HVN_POC_MODE_ENABLED = True
+
+# Multi-timeframe configuration: (days, weight)
+HVN_POC_TIMEFRAMES = [
+    (7, 1.0),   # 7-day: highest weight/priority
+    (14, 0.7),  # 14-day: medium weight
+    (30, 0.5)   # 30-day: lowest weight
+]
+
+# Zone width as multiplier of 15-min ATR
+# 0.3 approximates a 5-minute ATR zone width
+HVN_POC_ZONE_WIDTH_MULTIPLIER = 0.5
+
+# Minimum POC zones to create per timeframe
+HVN_POC_MIN_ZONES = 6
+
+# Overlap threshold for filtering duplicate POCs
+# 0.005 = 0.5% price difference threshold
+HVN_POC_OVERLAP_THRESHOLD = 0.005
+
+# POC Zone Discovery Weights
+# Used when calculating confluence scores in HVN anchor mode
+POC_MODE_WEIGHTS = {
+    'hvn_poc': 3.0,      # Base weight for POC itself
+    'fractal': 2.5,      # Fractal overlap weight
+    'cam-monthly': 2.0,  # Monthly Camarilla
+    'cam-weekly': 1.5,   # Weekly Camarilla
+    'cam-daily': 1.0,    # Daily Camarilla
+    'weekly': 2.0,       # Weekly levels
+    'daily-zone': 1.0,   # Daily zones
+    'daily-level': 0.5,  # Daily levels
+    'atr': 1.0,          # ATR zones
+    'market-structure': 0.8  # Market structure levels
+}
+
 # Logging configuration
 import logging
 

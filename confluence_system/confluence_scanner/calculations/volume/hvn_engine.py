@@ -315,6 +315,9 @@ class HVNEngine:
         
         # Identify contiguous clusters
         clusters = self.identify_contiguous_clusters(filtered_levels, profile_levels)
+
+        # Extract POCs for zone anchoring
+        pocs = self.volume_profile.get_multiple_pocs(count=12)  # Get top 12 POCs
         
         return HVNResult(
             hvn_unit=self.volume_profile.hvn_unit,
@@ -323,6 +326,79 @@ class HVNEngine:
             ranked_levels=ranked_levels,
             filtered_levels=filtered_levels
         )
+    
+    def create_poc_anchor_zones(self, 
+                           data: pd.DataFrame,
+                           timeframe_days: int = 7,
+                           zone_width_atr: float = None,
+                           min_zones: int = 6) -> Dict:
+        """
+        Create anchor zones from POCs for HVN-based zone discovery
+        
+        Args:
+            data: OHLCV DataFrame
+            timeframe_days: Days to analyze (default 7)
+            zone_width_atr: Zone width in ATR units (e.g., 5-min ATR)
+            min_zones: Minimum zones to create
+            
+        Returns:
+            Dictionary with POC zones and metadata
+        """
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        # Filter data for timeframe
+        current_date = data.index[-1] if isinstance(data.index, pd.DatetimeIndex) else pd.Timestamp.now()
+        start_date = current_date - timedelta(days=timeframe_days)
+        timeframe_data = data[data.index >= start_date].copy()
+        
+        # Prepare and build volume profile
+        prepared_data = self.prepare_data(timeframe_data)
+        profile_levels = self.volume_profile.build_volume_profile(
+            prepared_data, 
+            include_pre=True, 
+            include_post=True
+        )
+        
+        if not profile_levels:
+            logger.warning(f"No volume profile levels for {timeframe_days}-day HVN")
+            return {'poc_zones': [], 'metadata': {}}
+        
+        # Get POCs
+        pocs = self.volume_profile.get_multiple_pocs(count=min_zones * 2)  # Get extra for filtering
+        
+        if not pocs:
+            logger.warning("No POCs identified")
+            return {'poc_zones': [], 'metadata': {}}
+        
+        # Create zones from POCs
+        poc_zones = []
+        for i, poc in enumerate(pocs):
+            zone = {
+                'zone_id': f'hvn_poc_{timeframe_days}d_{i}',
+                'poc_price': poc.center,
+                'poc_volume_pct': poc.percent_of_total,
+                'zone_low': poc.center - (zone_width_atr / 2) if zone_width_atr else poc.low,
+                'zone_high': poc.center + (zone_width_atr / 2) if zone_width_atr else poc.high,
+                'zone_width': zone_width_atr if zone_width_atr else (poc.high - poc.low),
+                'timeframe_days': timeframe_days,
+                'rank': i + 1,  # 1 = highest volume
+                'type': 'hvn_poc_anchor',
+                'source': f'hvn_{timeframe_days}d_poc'
+            }
+            poc_zones.append(zone)
+        
+        logger.info(f"Created {len(poc_zones)} POC anchor zones from {timeframe_days}-day HVN")
+        
+        return {
+            'poc_zones': poc_zones,
+            'metadata': {
+                'timeframe_days': timeframe_days,
+                'total_pocs': len(pocs),
+                'price_range': self.volume_profile.price_range,
+                'zone_width_atr': zone_width_atr
+            }
+        }
     
     def identify_volume_peaks(self, 
                             levels: List[PriceLevel], 

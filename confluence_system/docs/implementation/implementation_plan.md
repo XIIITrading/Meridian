@@ -1,842 +1,557 @@
-Confluence System - Final Implementation Plan v3.0
-Executive Summary
-This document provides the final step-by-step implementation plan for building the unified confluence_system using a modular architecture with maximum code reuse, plugin-based confluence calculations, and Supabase integration.
-Enhanced Project Structure
-C:/XIIITradingSystems/Meridian/confluence_system/
-├── ui/                           # NEW MODULE
-│   ├── __init__.py
-│   ├── orchestrator.py          # UI coordination
-│   ├── display_widgets.py      # Zone display components
-│   └── formatters.py            # Display formatting
-├── data/                        # NEW MODULE  
-│   ├── __init__.py
-│   ├── orchestrator.py          # Data flow coordination
-│   ├── fetcher.py               # Unified data fetching
-│   └── cache.py                 # Data caching layer
-├── database/                    # NEW MODULE - SUPABASE
-│   ├── __init__.py
-│   ├── orchestrator.py          # Database coordination
-│   ├── connection.py            # Supabase connection manager
-│   ├── publisher.py             # Push results to Supabase
-│   ├── retriever.py             # Fetch historical results
-│   └── schemas.py               # Database schemas
-├── fractal_engine/              # EXISTING - MODULARIZE
-│   ├── __init__.py
-│   ├── orchestrator.py          # Fractal coordination
-│   ├── detector.py              # FROM fractal_detector.py
-│   ├── data_fetcher.py          # FROM data_fetcher.py
-│   └── config.py                # FROM config.py
-├── confluence_scanner/          # EXISTING - ENHANCED
-│   ├── __init__.py
-│   ├── orchestrator.py          # Scanner coordination with plugin system
-│   ├── scanner.py               # FROM zone_scanner.py
-│   ├── discovery.py             # FROM zone_discovery.py
-│   ├── plugin_registry.py       # NEW - Plugin management
-│   ├── calculations/            # MODULAR PLUGINS
-│   │   ├── __init__.py
-│   │   ├── base_plugin.py       # NEW - Base plugin interface
-│   │   ├── hvn_plugin.py        # NEW - HVN calculations (30/14/7 day)
-│   │   ├── camarilla_plugin.py  # NEW - Camarilla pivots (M/W/D)
-│   │   ├── atr_plugin.py        # NEW - ATR zone calculations
-│   │   ├── reference_plugin.py  # NEW - PDC/PDH/PDL/ONH/ONL
-│   │   └── custom/              # NEW - User custom plugins
-│   └── data/                    # COPY entire folder
-├── zone_identification/         # NEW MODULE
-│   ├── __init__.py
-│   ├── orchestrator.py          # Zone processing coordination
-│   ├── fractal_converter.py     # Convert fractals to zones
-│   ├── active_filter.py         # Active range filtering
-│   └── overlap_analyzer.py      # Zone overlap analysis
-├── results_engine/              # ENHANCED MODULE
-│   ├── __init__.py
-│   ├── orchestrator.py          # Results coordination
-│   ├── formatter.py             # Format final results
-│   ├── exporter.py              # Export capabilities
-│   ├── database_publisher.py    # NEW - Supabase publishing
-│   └── logger.py                # Logging results
-├── config/                      # UNIFIED CONFIG
-│   ├── system_config.py         # Merged configuration
-│   ├── plugin_config.yaml       # NEW - Plugin enable/disable
-│   └── database_config.py       # NEW - Supabase configuration
-├── plugins/                     # NEW - Custom plugin directory
-│   └── README.md                # Plugin development guide
-├── main.py                      # Main entry point
-└── orchestrator.py              # System-level orchestrator
+Implementation Plan: HVN-Anchored Zone Discovery
+Overview
+Transform the confluence system from "clustering creates zones" to "HVN POCs are anchor zones that attract confluence"
 
-Phase 1: Migration and Modularization
-Step 1.1: Create Base Structure
-bash# Execute these commands
-cd C:/XIIITradingSystems/Meridian
-mkdir -p confluence_system/{ui,data,fractal_engine,confluence_scanner,zone_identification,results_engine,config}
+PHASE 0: File Request List for Claude
+Claude should request these exact files in this order:
+GROUP 1 - HVN/Volume Analysis Files:
+1. confluence_scanner/calculations/volume/hvn_engine.py
+2. confluence_scanner/calculations/volume/volume_profile.py
 
-# Create __init__.py files for each module
-for dir in ui data fractal_engine confluence_scanner zone_identification results_engine; do
-    touch confluence_system/$dir/__init__.py
-    touch confluence_system/$dir/orchestrator.py
-done
-Step 1.2: Migrate Fractal Engine
-SHOW AI AGENT THESE FILES:
+GROUP 2 - Zone Discovery Files:
+3. confluence_scanner/discovery/zone_discovery.py
 
-levels_zones/fractal_engine/fractal_detector.py (Document #42)
-levels_zones/fractal_engine/data_fetcher.py (Document #40)
-levels_zones/fractal_engine/config.py (Document #39)
+GROUP 3 - Scanner/Orchestrator Files:
+4. confluence_scanner/scanner/zone_scanner.py
+5. confluence_scanner/orchestrator.py
 
-MIGRATION INSTRUCTIONS:
-python# File: confluence_system/fractal_engine/orchestrator.py - NEW TO CREATE
-"""
-Orchestrator for fractal engine module
-Coordinates all fractal detection operations
-"""
+GROUP 4 - CLI Interface:
+6. confluence_cli.py
 
-class FractalOrchestrator:
-    def __init__(self):
-        # Import detector from migrated file
-        from .detector import FractalDetector
-        from .data_fetcher import DataFetcher
-        self.detector = FractalDetector()
-        self.data_fetcher = DataFetcher()
+GROUP 5 - Configuration:
+7. confluence_scanner/config.py
+
+PHASE 1: Add POC Extraction to Volume Profile (30 minutes)
+File: confluence_scanner/calculations/volume/volume_profile.py
+STEP 1.1: Add POC identification method
+After the existing get_top_levels() method (around line 280), ADD this new method:
+pythondef get_poc(self) -> Optional[PriceLevel]:
+    """
+    Get the Point of Control (POC) - the price level with maximum volume
     
-    def run_detection(self, symbol: str, lookback_days: int = 90):
-        """
-        Main entry point for fractal detection
-        References: fractal_detector.py Line 24-44
-        """
-        # 1. Fetch data
-        # 2. Detect fractals
-        # 3. Return results
-        pass
-
-# COPY WITH MODIFICATIONS:
-# Copy fractal_detector.py → fractal_engine/detector.py
-# If detector.py > 500 lines, split into:
-#   - detector.py (main detection logic)
-#   - calculations.py (helper calculations)
-#   - validators.py (validation logic)
-Step 1.3: Migrate Confluence Scanner
-SHOW AI AGENT THESE FILES:
-
-levels_zones/confluence_scanner/scanner/zone_scanner.py (Document #36)
-levels_zones/confluence_scanner/discovery/zone_discovery.py (Document #29)
-levels_zones/confluence_scanner/calculations/ (entire folder)
-
-MIGRATION INSTRUCTIONS:
-python# File: confluence_system/confluence_scanner/orchestrator.py - NEW TO CREATE
-"""
-Orchestrator for confluence scanner module
-"""
-
-class ConfluenceOrchestrator:
-    def __init__(self):
-        from .scanner import ZoneScanner
-        from .discovery import ZoneDiscoveryEngine
-        self.scanner = ZoneScanner()
-        self.discovery_engine = ZoneDiscoveryEngine()
+    Returns:
+        PriceLevel object with highest volume, or None if no levels
+    """
+    if not self.price_levels:
+        return None
     
-    def run_analysis(self, symbol: str, fractals: Dict):
-        """
-        Main entry point for confluence analysis
-        References: zone_scanner.py Line 47-165
-        """
-        # 1. Scan for zones
-        # 2. Discover confluences
-        # 3. Return analyzed zones
-        pass
+    # Find the level with maximum volume
+    poc_level = max(self.price_levels, key=lambda x: x.volume)
+    
+    # Log POC information
+    logger.info(f"POC identified at ${poc_level.center:.2f} with "
+                f"{poc_level.percent_of_total:.2f}% of total volume")
+    
+    return poc_level
 
-Phase 2: Enhanced Confluence Scanner with Plugin System
-Step 2.1: Plugin Base Architecture
-NEW FILE TO CREATE: confluence_system/confluence_scanner/base_plugin.py
-python# File: confluence_system/confluence_scanner/calculations/base_plugin.py
-"""
-Base plugin interface for confluence calculations
-"""
-from abc import ABC, abstractmethod
-from typing import Dict, List, Optional
-from dataclasses import dataclass
-
-@dataclass
-class ConfluenceResult:
-    """Standard result format for all plugins"""
-    source: str  # e.g., "HVN_30D", "CAMARILLA_DAILY"
-    levels: List[float]  # Price levels identified
-    strength: float  # Confluence strength (0-1)
-    metadata: Dict  # Plugin-specific metadata
-
-class ConfluencePlugin(ABC):
-    """Base class for all confluence calculation plugins"""
+def get_multiple_pocs(self, count: int = 6) -> List[PriceLevel]:
+    """
+    Get multiple POCs (highest volume levels) for zone creation
     
-    def __init__(self, enabled: bool = True, weight: float = 1.0):
-        self.enabled = enabled
-        self.weight = weight
-        self.name = self.__class__.__name__
-    
-    @abstractmethod
-    def calculate(self, market_data: Dict) -> Optional[ConfluenceResult]:
-        """Calculate confluence levels"""
-        pass
-    
-    @abstractmethod
-    def validate_data(self, market_data: Dict) -> bool:
-        """Validate if required data is present"""
-        pass
-    
-    def get_required_data(self) -> List[str]:
-        """Return list of required data fields"""
+    Args:
+        count: Number of POCs to return
+        
+    Returns:
+        List of PriceLevel objects sorted by volume (highest first)
+    """
+    if not self.price_levels:
         return []
-Step 2.2: Plugin Registry System
-NEW FILE TO CREATE: confluence_system/confluence_scanner/plugin_registry.py
-python# File: confluence_system/confluence_scanner/plugin_registry.py
-"""
-Plugin registry for dynamic confluence calculation management
-"""
-import importlib
-import yaml
-from typing import Dict, List, Type
-from .calculations.base_plugin import ConfluencePlugin
+    
+    # Sort by volume and take top N
+    sorted_levels = sorted(self.price_levels, 
+                          key=lambda x: x.volume, 
+                          reverse=True)
+    
+    # Take requested count
+    pocs = sorted_levels[:count]
+    
+    # Log the POCs
+    for i, poc in enumerate(pocs, 1):
+        logger.info(f"POC {i}: ${poc.center:.2f} ({poc.percent_of_total:.2f}% volume)")
+    
+    return pocs
 
-class PluginRegistry:
-    def __init__(self, config_path: str = "config/plugin_config.yaml"):
-        self.plugins: Dict[str, ConfluencePlugin] = {}
-        self.config_path = config_path
-        self.load_plugin_config()
+PHASE 2: Enhance HVN Engine for POC-Based Zones (45 minutes)
+File: confluence_scanner/calculations/volume/hvn_engine.py
+STEP 2.1: Add POC extraction to analyze method
+Find the analyze() method (around line 150). After the line that identifies clusters, ADD:
+python# Extract POCs for zone anchoring
+pocs = self.volume_profile.get_multiple_pocs(count=12)  # Get top 12 POCs
+STEP 2.2: Add new POC zone creation method
+After the analyze_timeframe() method (around line 350), ADD:
+pythondef create_poc_anchor_zones(self, 
+                           data: pd.DataFrame,
+                           timeframe_days: int = 7,
+                           zone_width_atr: float = None,
+                           min_zones: int = 6) -> Dict:
+    """
+    Create anchor zones from POCs for HVN-based zone discovery
     
-    def load_plugin_config(self):
-        """Load plugin configuration from YAML"""
-        with open(self.config_path, 'r') as f:
-            config = yaml.safe_load(f)
+    Args:
+        data: OHLCV DataFrame
+        timeframe_days: Days to analyze (default 7)
+        zone_width_atr: Zone width in ATR units (e.g., 5-min ATR)
+        min_zones: Minimum zones to create
         
-        for plugin_config in config['plugins']:
-            if plugin_config['enabled']:
-                self.register_plugin(
-                    plugin_config['name'],
-                    plugin_config['module'],
-                    plugin_config['weight']
-                )
+    Returns:
+        Dictionary with POC zones and metadata
+    """
+    # Filter data for timeframe
+    current_date = data.index[-1] if isinstance(data.index, pd.DatetimeIndex) else pd.Timestamp.now()
+    start_date = current_date - timedelta(days=timeframe_days)
+    timeframe_data = data[data.index >= start_date].copy()
     
-    def register_plugin(self, name: str, module_path: str, weight: float = 1.0):
-        """Dynamically register a plugin"""
-        try:
-            module = importlib.import_module(module_path)
-            plugin_class = getattr(module, name)
-            self.plugins[name] = plugin_class(enabled=True, weight=weight)
-        except Exception as e:
-            print(f"Failed to load plugin {name}: {e}")
+    # Prepare and build volume profile
+    prepared_data = self.prepare_data(timeframe_data)
+    profile_levels = self.volume_profile.build_volume_profile(
+        prepared_data, 
+        include_pre=True, 
+        include_post=True
+    )
     
-    def unregister_plugin(self, name: str):
-        """Remove a plugin from registry"""
-        if name in self.plugins:
-            del self.plugins[name]
+    if not profile_levels:
+        logger.warning(f"No volume profile levels for {timeframe_days}-day HVN")
+        return {'poc_zones': [], 'metadata': {}}
     
-    def get_active_plugins(self) -> List[ConfluencePlugin]:
-        """Return all active plugins"""
-        return [p for p in self.plugins.values() if p.enabled]
+    # Get POCs
+    pocs = self.volume_profile.get_multiple_pocs(count=min_zones * 2)  # Get extra for filtering
     
-    def toggle_plugin(self, name: str, enabled: bool):
-        """Enable/disable a plugin without removing it"""
-        if name in self.plugins:
-            self.plugins[name].enabled = enabled
-Step 2.3: Plugin Configuration File
-NEW FILE TO CREATE: confluence_system/config/plugin_config.yaml
-yaml# File: confluence_system/config/plugin_config.yaml
-# Plugin configuration - easily add/remove/disable plugins
-
-plugins:
-  # High Volume Node plugins
-  - name: HVN30DayPlugin
-    module: confluence_scanner.calculations.hvn_plugin
-    enabled: true
-    weight: 1.5
+    if not pocs:
+        logger.warning("No POCs identified")
+        return {'poc_zones': [], 'metadata': {}}
     
-  - name: HVN14DayPlugin
-    module: confluence_scanner.calculations.hvn_plugin
-    enabled: true
-    weight: 1.25
-    
-  - name: HVN7DayPlugin
-    module: confluence_scanner.calculations.hvn_plugin
-    enabled: true
-    weight: 1.0
-    
-  # Camarilla Pivot plugins
-  - name: CamarillaMonthlyPlugin
-    module: confluence_scanner.calculations.camarilla_plugin
-    enabled: true
-    weight: 1.5
-    
-  - name: CamarillaWeeklyPlugin
-    module: confluence_scanner.calculations.camarilla_plugin
-    enabled: true
-    weight: 1.25
-    
-  - name: CamarillaDailyPlugin
-    module: confluence_scanner.calculations.camarilla_plugin
-    enabled: true
-    weight: 1.0
-    
-  # ATR Zone plugin
-  - name: ATRZonePlugin
-    module: confluence_scanner.calculations.atr_plugin
-    enabled: true
-    weight: 1.0
-    
-  # Reference levels plugin
-  - name: ReferenceLevelsPlugin
-    module: confluence_scanner.calculations.reference_plugin
-    enabled: true
-    weight: 0.75
-    
-  # Custom plugins (user-defined)
-  # - name: CustomVWAPPlugin
-  #   module: plugins.vwap_plugin
-  #   enabled: false
-  #   weight: 1.0
-Step 2.4: Enhanced Confluence Orchestrator
-ENHANCED FILE: confluence_system/confluence_scanner/orchestrator.py
-SHOW AI AGENT:
-
-Existing zone_scanner.py (Doc #36)
-Existing zone_discovery.py (Doc #29)
-
-python# File: confluence_system/confluence_scanner/orchestrator.py
-"""
-Enhanced orchestrator with plugin system for confluence scanner
-"""
-from typing import Dict, List
-from .plugin_registry import PluginRegistry
-from .scanner import ZoneScanner
-from .discovery import ZoneDiscoveryEngine
-
-class ConfluenceOrchestrator:
-    def __init__(self):
-        self.scanner = ZoneScanner()
-        self.discovery_engine = ZoneDiscoveryEngine()
-        self.plugin_registry = PluginRegistry()
-    
-    def run_analysis(self, symbol: str, market_data: Dict):
-        """
-        Run confluence analysis with all active plugins
-        """
-        confluence_results = []
-        
-        # Execute all active plugins
-        for plugin in self.plugin_registry.get_active_plugins():
-            if plugin.validate_data(market_data):
-                result = plugin.calculate(market_data)
-                if result:
-                    confluence_results.append(result)
-        
-        # Run existing zone scanning
-        zones = self.scanner.scan(symbol, market_data)
-        
-        # Discover confluences with plugin results
-        enhanced_zones = self.discovery_engine.discover_zones(
-            zones, 
-            confluence_results
-        )
-        
-        return {
-            'zones': enhanced_zones,
-            'confluence_sources': confluence_results,
-            'active_plugins': [p.name for p in self.plugin_registry.get_active_plugins()]
+    # Create zones from POCs
+    poc_zones = []
+    for i, poc in enumerate(pocs):
+        zone = {
+            'zone_id': f'hvn_poc_{timeframe_days}d_{i}',
+            'poc_price': poc.center,
+            'poc_volume_pct': poc.percent_of_total,
+            'zone_low': poc.center - (zone_width_atr / 2) if zone_width_atr else poc.low,
+            'zone_high': poc.center + (zone_width_atr / 2) if zone_width_atr else poc.high,
+            'zone_width': zone_width_atr if zone_width_atr else (poc.high - poc.low),
+            'timeframe_days': timeframe_days,
+            'rank': i + 1,  # 1 = highest volume
+            'type': 'hvn_poc_anchor',
+            'source': f'hvn_{timeframe_days}d_poc'
         }
+        poc_zones.append(zone)
     
-    def add_custom_plugin(self, plugin_path: str, weight: float = 1.0):
-        """Allow runtime addition of custom plugins"""
-        self.plugin_registry.register_plugin(
-            plugin_path.split('.')[-1],
-            plugin_path,
-            weight
-        )
+    logger.info(f"Created {len(poc_zones)} POC anchor zones from {timeframe_days}-day HVN")
     
-    def configure_plugin(self, plugin_name: str, enabled: bool = None, weight: float = None):
-        """Runtime plugin configuration"""
-        if plugin_name in self.plugin_registry.plugins:
-            if enabled is not None:
-                self.plugin_registry.toggle_plugin(plugin_name, enabled)
-            if weight is not None:
-                self.plugin_registry.plugins[plugin_name].weight = weight
-
-Phase 3: Database Integration Module
-Step 3.1: Database Module Structure
-NEW FILE TO CREATE: confluence_system/database/orchestrator.py
-SHOW AI AGENT:
-
-Existing Supabase connection from your previous system
-
-python# File: confluence_system/database/orchestrator.py
-"""
-Database orchestrator for Supabase integration
-"""
-from typing import Dict, List, Optional
-from datetime import datetime
-from .connection import SupabaseConnection
-from .publisher import ResultsPublisher
-from .retriever import ResultsRetriever
-
-class DatabaseOrchestrator:
-    def __init__(self):
-        self.connection = SupabaseConnection()
-        self.publisher = ResultsPublisher(self.connection)
-        self.retriever = ResultsRetriever(self.connection)
-    
-    def save_analysis(self, analysis_results: Dict) -> bool:
-        """Save complete analysis to Supabase"""
-        try:
-            # Prepare data for database
-            db_record = self.publisher.prepare_record(analysis_results)
-            
-            # Push to Supabase
-            result = self.publisher.publish(db_record)
-            
-            return result['success']
-        except Exception as e:
-            print(f"Failed to save to database: {e}")
-            return False
-    
-    def get_historical_analysis(self, symbol: str, 
-                                days_back: int = 30) -> List[Dict]:
-        """Retrieve historical analyses from Supabase"""
-        return self.retriever.get_by_symbol(symbol, days_back)
-    
-    def get_analysis_by_id(self, analysis_id: str) -> Optional[Dict]:
-        """Retrieve specific analysis by ID"""
-        return self.retriever.get_by_id(analysis_id)
-Step 3.2: Supabase Connection Manager
-NEW FILE TO CREATE: confluence_system/database/connection.py
-python# File: confluence_system/database/connection.py
-"""
-Supabase connection management
-"""
-import os
-from supabase import create_client, Client
-from ..config.database_config import SUPABASE_CONFIG
-
-class SupabaseConnection:
-    def __init__(self):
-        self.url = SUPABASE_CONFIG['url']
-        self.key = SUPABASE_CONFIG['anon_key']
-        self.client: Client = None
-        self.connect()
-    
-    def connect(self):
-        """Establish connection to Supabase"""
-        try:
-            self.client = create_client(self.url, self.key)
-            print("Connected to Supabase successfully")
-        except Exception as e:
-            print(f"Failed to connect to Supabase: {e}")
-            raise
-    
-    def get_client(self) -> Client:
-        """Return active client"""
-        if not self.client:
-            self.connect()
-        return self.client
-    
-    def test_connection(self) -> bool:
-        """Test if connection is active"""
-        try:
-            # Attempt a simple query
-            self.client.table('confluence_results').select("id").limit(1).execute()
-            return True
-        except:
-            return False
-Step 3.3: Results Publisher
-NEW FILE TO CREATE: confluence_system/database/publisher.py
-python# File: confluence_system/database/publisher.py
-"""
-Publish analysis results to Supabase
-"""
-from typing import Dict, List
-from datetime import datetime
-import json
-
-class ResultsPublisher:
-    def __init__(self, connection):
-        self.connection = connection
-        self.client = connection.get_client()
-    
-    def prepare_record(self, analysis_results: Dict) -> Dict:
-        """
-        Prepare analysis results for database storage
-        """
-        return {
-            'symbol': analysis_results.get('symbol'),
-            'analysis_datetime': datetime.now().isoformat(),
-            'fractals': json.dumps(analysis_results.get('fractals', [])),
-            'zones': json.dumps(analysis_results.get('zones', [])),
-            'confluence_sources': json.dumps(
-                analysis_results.get('confluence_sources', [])
-            ),
-            'metrics': json.dumps(analysis_results.get('metrics', {})),
-            'active_plugins': json.dumps(
-                analysis_results.get('active_plugins', [])
-            ),
-            'parameters': json.dumps({
-                'lookback_days': analysis_results.get('lookback_days', 90),
-                'atr_multiplier': analysis_results.get('atr_multiplier', 2.0),
-                'overlap_threshold': analysis_results.get('overlap_threshold', 0.25)
-            })
+    return {
+        'poc_zones': poc_zones,
+        'metadata': {
+            'timeframe_days': timeframe_days,
+            'total_pocs': len(pocs),
+            'price_range': self.volume_profile.price_range,
+            'zone_width_atr': zone_width_atr
         }
-    
-    def publish(self, record: Dict) -> Dict:
-        """
-        Push record to Supabase
-        """
-        try:
-            result = self.client.table('confluence_results').insert(record).execute()
-            
-            # Also store individual zones for faster queries
-            if 'zones' in record:
-                self.publish_zones(record['symbol'], json.loads(record['zones']))
-            
-            return {'success': True, 'id': result.data[0]['id']}
-        except Exception as e:
-            return {'success': False, 'error': str(e)}
-    
-    def publish_zones(self, symbol: str, zones: List[Dict]):
-        """
-        Store individual zones for detailed analysis
-        """
-        zone_records = []
-        for zone in zones:
-            zone_records.append({
-                'symbol': symbol,
-                'zone_type': zone.get('type'),
-                'high_price': zone.get('zone_high'),
-                'low_price': zone.get('zone_low'),
-                'confluence_level': zone.get('confluence_level'),
-                'confluence_score': zone.get('confluence_score'),
-                'created_at': datetime.now().isoformat()
-            })
-        
-        if zone_records:
-            self.client.table('confluence_zones').insert(zone_records).execute()
-Step 3.4: Database Configuration
-NEW FILE TO CREATE: confluence_system/config/database_config.py
-python# File: confluence_system/config/database_config.py
-"""
-Database configuration for Supabase
-"""
-import os
-from dotenv import load_dotenv
-
-load_dotenv()
-
-SUPABASE_CONFIG = {
-    'url': os.getenv('SUPABASE_URL', 'your-supabase-url'),
-    'anon_key': os.getenv('SUPABASE_ANON_KEY', 'your-anon-key'),
-    'service_key': os.getenv('SUPABASE_SERVICE_KEY', 'your-service-key')  # Optional
-}
-
-# Database table schemas
-TABLES = {
-    'confluence_results': {
-        'id': 'uuid',
-        'symbol': 'text',
-        'analysis_datetime': 'timestamp',
-        'fractals': 'jsonb',
-        'zones': 'jsonb',
-        'confluence_sources': 'jsonb',
-        'metrics': 'jsonb',
-        'active_plugins': 'jsonb',
-        'parameters': 'jsonb',
-        'created_at': 'timestamp'
-    },
-    'confluence_zones': {
-        'id': 'uuid',
-        'symbol': 'text',
-        'zone_type': 'text',
-        'high_price': 'decimal',
-        'low_price': 'decimal',
-        'confluence_level': 'text',
-        'confluence_score': 'decimal',
-        'created_at': 'timestamp'
     }
-}
-Step 3.5: Database Schema SQL
-NEW FILE TO CREATE: confluence_system/database/schema.sql
-sql-- File: confluence_system/database/schema.sql
--- Supabase table creation scripts
 
--- Main results table
-CREATE TABLE IF NOT EXISTS confluence_results (
-    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-    symbol TEXT NOT NULL,
-    analysis_datetime TIMESTAMP WITH TIME ZONE NOT NULL,
-    fractals JSONB,
-    zones JSONB,
-    confluence_sources JSONB,
-    metrics JSONB,
-    active_plugins JSONB,
-    parameters JSONB,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- Individual zones table for detailed queries
-CREATE TABLE IF NOT EXISTS confluence_zones (
-    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-    symbol TEXT NOT NULL,
-    zone_type TEXT,
-    high_price DECIMAL(10, 4),
-    low_price DECIMAL(10, 4),
-    confluence_level TEXT,
-    confluence_score DECIMAL(5, 2),
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- Indexes for performance
-CREATE INDEX idx_confluence_results_symbol ON confluence_results(symbol);
-CREATE INDEX idx_confluence_results_datetime ON confluence_results(analysis_datetime);
-CREATE INDEX idx_confluence_zones_symbol ON confluence_zones(symbol);
-CREATE INDEX idx_confluence_zones_level ON confluence_zones(confluence_level);
-
-Phase 4: Enhanced System Orchestrator
-UPDATED FILE: confluence_system/orchestrator.py
-python# File: confluence_system/orchestrator.py
-"""
-Enhanced system-level orchestrator with plugin management and database integration
-"""
-
-class SystemOrchestrator:
-    def __init__(self):
-        from fractal_engine.orchestrator import FractalOrchestrator
-        from confluence_scanner.orchestrator import ConfluenceOrchestrator
-        from zone_identification.orchestrator import ZoneIdentificationOrchestrator
-        from results_engine.orchestrator import ResultsOrchestrator
-        from data.orchestrator import DataOrchestrator
-        from database.orchestrator import DatabaseOrchestrator
-        
-        self.fractal = FractalOrchestrator()
-        self.confluence = ConfluenceOrchestrator()
-        self.zone_id = ZoneIdentificationOrchestrator()
-        self.results = ResultsOrchestrator()
-        self.data = DataOrchestrator()
-        self.database = DatabaseOrchestrator()
+PHASE 3: Create New Zone Discovery Mode (2 hours)
+File: confluence_scanner/discovery/zone_discovery.py
+STEP 3.1: Add initialization parameter for mode selection
+In the __init__ method (around line 25), MODIFY:
+pythondef __init__(self, merge_overlapping: bool = False, merge_identical: bool = True, 
+             discovery_mode: str = 'cluster'):  # ADD THIS PARAMETER
+    """
+    Initialize zone discovery engine
     
-    def run_complete_analysis(self, symbol: str, analysis_params: Dict,
-                             save_to_db: bool = True):
-        """
-        Execute the complete 6-step protocol with database integration
-        """
-        # Step 1: Detect fractals with 90-day lookback
-        fractals = self.fractal.run_detection(symbol, lookback_days=90)
+    Args:
+        merge_overlapping: If True, merge zones that overlap
+        merge_identical: If True, merge items at identical prices
+        discovery_mode: 'cluster' (original) or 'hvn_anchor' (new)
+    """
+    self.merge_overlapping = merge_overlapping
+    self.merge_identical = merge_identical
+    self.identical_threshold = 0.10
+    self.discovery_mode = discovery_mode  # ADD THIS
+    logger.info(f"ZoneDiscoveryEngine initialized - Mode: {discovery_mode}, "
+                f"Merge overlapping: {merge_overlapping}, "
+                f"Merge identical: {merge_identical}")
+STEP 3.2: Add new HVN-anchored discovery method
+After the existing discover_zones() method (around line 80), ADD this new method:
+pythondef discover_hvn_anchored_zones(self,
+                               poc_zones: List[Dict],
+                               current_price: float,
+                               atr_15min: float,
+                               confluence_sources: Dict[str, List[Dict]]) -> List[Zone]:
+    """
+    Discover zones using HVN POCs as anchors
+    
+    Args:
+        poc_zones: POC anchor zones from HVN analysis
+        current_price: Current market price
+        atr_15min: 15-minute ATR
+        confluence_sources: All other confluence sources to check
         
-        # Step 2: Run confluence analysis with plugin system
-        confluence_data = self.confluence.run_analysis(symbol, fractals)
+    Returns:
+        List of Zone objects with confluence scoring
+    """
+    logger.info(f"Starting HVN-anchored discovery with {len(poc_zones)} POC zones")
+    
+    zones = []
+    zone_id = 0
+    
+    for poc_zone in poc_zones:
+        # Initialize confluence tracking for this POC zone
+        overlapping_items = []
+        confluence_types = set()
         
-        # Steps 3-5: Zone identification and overlap
-        final_zones = self.zone_id.process_zones(
-            fractals, 
-            confluence_data['zones'],
-            analysis_params['current_price'],
-            analysis_params['daily_atr']
+        # Check each confluence source for overlap with POC zone
+        for source_type, items in confluence_sources.items():
+            # Skip HVN sources as they're already our anchors
+            if 'hvn' in source_type.lower():
+                continue
+                
+            for item in items:
+                # Check if item overlaps with POC zone
+                item_low = item.get('low', item.get('level', 0))
+                item_high = item.get('high', item.get('level', 0))
+                
+                # Calculate overlap
+                if item_low <= poc_zone['zone_high'] and item_high >= poc_zone['zone_low']:
+                    overlapping_items.append(item)
+                    confluence_types.add(source_type)
+        
+        # Calculate confluence score based on overlapping items
+        base_score = 3.0  # Base score for being an HVN POC
+        
+        # Add score for each overlapping item
+        for item in overlapping_items:
+            item_weight = self.confluence_weights.get(item.get('type', 'unknown'), 1.0)
+            base_score += item_weight
+        
+        # Apply diversity bonus
+        if len(confluence_types) > 1:
+            diversity_bonus = 1.0 + (len(confluence_types) - 1) * 0.1
+            confluence_score = base_score * diversity_bonus
+        else:
+            confluence_score = base_score
+        
+        # Determine confluence level
+        if confluence_score >= 12.0:
+            confluence_level = 'L5'
+        elif confluence_score >= 8.0:
+            confluence_level = 'L4'
+        elif confluence_score >= 5.0:
+            confluence_level = 'L3'
+        elif confluence_score >= 2.5:
+            confluence_level = 'L2'
+        else:
+            confluence_level = 'L1'
+        
+        # Create zone object
+        zone = Zone(
+            zone_id=zone_id,
+            zone_low=poc_zone['zone_low'],
+            zone_high=poc_zone['zone_high'],
+            center_price=poc_zone['poc_price'],
+            zone_width=poc_zone['zone_width'],
+            zone_type='resistance' if poc_zone['poc_price'] > current_price else 'support',
+            confluence_level=confluence_level,
+            confluence_score=confluence_score,
+            confluent_sources=[
+                {
+                    'type': 'hvn_poc',
+                    'name': poc_zone['zone_id'],
+                    'level': poc_zone['poc_price'],
+                    'strength': poc_zone['poc_volume_pct']
+                }
+            ] + overlapping_items,
+            distance_from_price=abs(poc_zone['poc_price'] - current_price),
+            distance_percentage=abs(poc_zone['poc_price'] - current_price) / current_price * 100,
+            recency_score=1.0,
+            metadata={
+                'is_hvn_anchor': True,
+                'hvn_rank': poc_zone['rank'],
+                'hvn_volume_pct': poc_zone['poc_volume_pct']
+            }
         )
         
-        # Step 6: Format results
-        results = self.results.process_results(
-            final_zones, 
-            confluence_data['metrics']
-        )
-        
-        # Add metadata for database
-        results['symbol'] = symbol
-        results['fractals'] = fractals
-        results['confluence_sources'] = confluence_data['confluence_sources']
-        results['active_plugins'] = confluence_data['active_plugins']
-        results['lookback_days'] = 90
-        results['atr_multiplier'] = 2.0
-        results['overlap_threshold'] = 0.25
-        
-        # Save to database if requested
-        if save_to_db:
-            db_result = self.database.save_analysis(results)
-            results['database_saved'] = db_result
-        
-        return results
+        zones.append(zone)
+        zone_id += 1
     
-    def configure_plugins(self, config: Dict):
-        """
-        Runtime plugin configuration
-        """
-        for plugin_name, settings in config.items():
-            self.confluence.configure_plugin(
-                plugin_name,
-                enabled=settings.get('enabled'),
-                weight=settings.get('weight')
+    # Sort zones by confluence score
+    zones.sort(key=lambda x: x.confluence_score, reverse=True)
+    
+    # Filter to L3+ zones only
+    high_confluence_zones = [z for z in zones if z.confluence_level in ['L5', 'L4', 'L3']]
+    
+    # Get 3 above and 3 below current price
+    zones_above = [z for z in high_confluence_zones if z.center_price > current_price][:3]
+    zones_below = [z for z in high_confluence_zones if z.center_price < current_price][:3]
+    
+    final_zones = zones_above + zones_below
+    
+    logger.info(f"HVN-anchored discovery complete: {len(final_zones)} zones "
+                f"({len(zones_above)} above, {len(zones_below)} below)")
+    
+    return final_zones
+STEP 3.3: Modify main discover_zones method to support both modes
+REPLACE the beginning of the discover_zones() method with:
+pythondef discover_zones(self,
+                  scan_low: float,
+                  scan_high: float,
+                  current_price: float,
+                  atr_15min: float,
+                  confluence_sources: Dict[str, List[Dict]],
+                  poc_zones: Optional[List[Dict]] = None) -> List[Zone]:
+    """
+    Discover zones from confluence sources
+    
+    Args:
+        scan_low: Lower bound of scan range
+        scan_high: Upper bound of scan range
+        current_price: Current market price
+        atr_15min: 15-minute ATR
+        confluence_sources: Dictionary of source type to items
+        poc_zones: Optional POC zones for HVN-anchored mode
+        
+    Returns:
+        List of Zone objects
+    """
+    # Use HVN-anchored mode if POC zones provided and mode is set
+    if self.discovery_mode == 'hvn_anchor' and poc_zones:
+        return self.discover_hvn_anchored_zones(
+            poc_zones, current_price, atr_15min, confluence_sources
+        )
+    
+    # Otherwise use original clustering mode
+    # [KEEP ALL EXISTING CODE FROM HERE]
+
+PHASE 4: Update Zone Scanner (1.5 hours)
+File: confluence_scanner/scanner/zone_scanner.py
+STEP 4.1: Add configuration for HVN zone width
+At the top of the class after the other multiplier definitions (around line 50), ADD:
+python# HVN POC Zone Configuration
+self.hvn_poc_mode = True  # Enable HVN-anchored discovery
+self.hvn_poc_zone_width_multiplier = 0.3  # Use 5-min ATR (approximate as % of 15-min)
+self.hvn_poc_timeframe = 7  # Days for HVN analysis
+STEP 4.2: Modify scan method to create POC zones first
+In the scan() method, BEFORE the "1. HVN PEAKS" section (around line 200), ADD:
+python# 0. CREATE HVN POC ANCHOR ZONES (if in POC mode)
+poc_zones = []
+if self.hvn_poc_mode:
+    try:
+        logger.info("Creating HVN POC anchor zones...")
+        
+        # Calculate 5-minute ATR approximation
+        atr_5min = metrics.atr_m15 * self.hvn_poc_zone_width_multiplier
+        
+        # Fetch data for POC analysis
+        end_date = analysis_datetime.strftime('%Y-%m-%d')
+        start_date = (analysis_datetime - timedelta(days=self.hvn_poc_timeframe)).strftime('%Y-%m-%d')
+        
+        df = self.polygon_client.fetch_bars(ticker, start_date, end_date, '5min')
+        if df is not None and not df.empty:
+            df['timestamp'] = df.index
+            
+            # Create POC zones
+            poc_result = self.hvn_engine.create_poc_anchor_zones(
+                df,
+                timeframe_days=self.hvn_poc_timeframe,
+                zone_width_atr=atr_5min,
+                min_zones=6
             )
-    
-    def add_custom_plugin(self, plugin_path: str):
-        """
-        Add a custom plugin at runtime
-        """
-        self.confluence.add_custom_plugin(plugin_path)
-    
-    def get_historical_analysis(self, symbol: str, days_back: int = 30):
-        """
-        Retrieve historical analyses from database
-        """
-        return self.database.get_historical_analysis(symbol, days_back)
+            
+            poc_zones = poc_result.get('poc_zones', [])
+            source_counts['hvn_poc_anchors'] = len(poc_zones)
+            logger.info(f"Created {len(poc_zones)} HVN POC anchor zones")
+        else:
+            logger.warning("No data for POC analysis")
+            
+    except Exception as e:
+        logger.error(f"POC zone creation failed: {e}")
+        poc_zones = []
+STEP 4.3: Modify zone discovery initialization
+Find where self.discovery_engine is initialized (around line 450), MODIFY:
+python# Set discovery mode based on configuration
+if self.hvn_poc_mode and poc_zones:
+    self.discovery_engine.discovery_mode = 'hvn_anchor'
+else:
+    self.discovery_engine.discovery_mode = 'cluster'
 
-Phase 5: Sample Plugin Implementations
-Step 5.1: HVN Plugin Example
-NEW FILE TO CREATE: confluence_system/confluence_scanner/calculations/hvn_plugin.py
-SHOW AI AGENT:
-
-HVN calculation logic from existing system
-
-python# File: confluence_system/confluence_scanner/calculations/hvn_plugin.py
-"""
-High Volume Node confluence plugins
-"""
-from typing import Dict, Optional
-from .base_plugin import ConfluencePlugin, ConfluenceResult
-
-class HVN30DayPlugin(ConfluencePlugin):
-    def calculate(self, market_data: Dict) -> Optional[ConfluenceResult]:
-        # Implement 30-day HVN calculation
-        # Reference existing HVN logic
-        pass
-    
-    def validate_data(self, market_data: Dict) -> bool:
-        return 'volume_profile_30d' in market_data
-    
-    def get_required_data(self) -> List[str]:
-        return ['volume_profile_30d', 'price_data_30d']
-
-class HVN14DayPlugin(ConfluencePlugin):
-    # Similar implementation for 14-day
-    pass
-
-class HVN7DayPlugin(ConfluencePlugin):
-    # Similar implementation for 7-day
-    pass
-Step 5.2: Custom Plugin Template
-NEW FILE TO CREATE: confluence_system/plugins/template_plugin.py
-python# File: confluence_system/plugins/template_plugin.py
-"""
-Template for creating custom confluence plugins
-"""
-from confluence_scanner.calculations.base_plugin import ConfluencePlugin, ConfluenceResult
-from typing import Dict, Optional
-
-class CustomConfluencePlugin(ConfluencePlugin):
-    """
-    Custom plugin template
-    
-    To use:
-    1. Copy this file and rename
-    2. Implement calculate() and validate_data()
-    3. Add to plugin_config.yaml
-    4. Or dynamically add via orchestrator.add_custom_plugin()
-    """
-    
-    def __init__(self, enabled: bool = True, weight: float = 1.0):
-        super().__init__(enabled, weight)
-        # Add any custom initialization here
-    
-    def calculate(self, market_data: Dict) -> Optional[ConfluenceResult]:
-        """
-        Your custom confluence calculation logic
-        """
-        # Example implementation
-        if not self.validate_data(market_data):
-            return None
-        
-        # Your calculation logic here
-        levels = []  # Calculate your levels
-        strength = 0.0  # Calculate strength
-        
-        return ConfluenceResult(
-            source=self.name,
-            levels=levels,
-            strength=strength,
-            metadata={'custom_field': 'custom_value'}
-        )
-    
-    def validate_data(self, market_data: Dict) -> bool:
-        """
-        Check if required data is available
-        """
-        required_fields = self.get_required_data()
-        return all(field in market_data for field in required_fields)
-    
-    def get_required_data(self) -> List[str]:
-        """
-        List your required data fields
-        """
-        return ['your_required_field_1', 'your_required_field_2']
-
-Implementation Timeline (Updated)
-Week 1: Foundation + Plugin System
-Days 1-3: Previous tasks PLUS
-
- Create plugin base architecture
- Implement plugin registry
- Create plugin configuration
-
-Days 4-5:
-
- Implement sample plugins (HVN, Camarilla, ATR)
- Test plugin enable/disable functionality
-
-Week 2: Database Integration + Testing
-Days 6-7: Database Module
-
- Set up Supabase tables
- Implement connection manager
- Create publisher/retriever
-
-Days 8-9: Integration
-
- Connect database to results engine
- Test end-to-end with database saves
- Verify plugin configuration persistence
-
-Day 10: Final Testing
-
- Test adding custom plugins
- Verify database retrieval
- Performance optimization
-
-
-Key Features Summary
-1. Plugin-Based Confluence System
-
-Easy Addition: Drop new plugin in plugins/ folder
-Easy Removal: Disable in plugin_config.yaml
-Runtime Control: Enable/disable without restart
-Custom Weights: Adjust importance per plugin
-Hot Reload: Add plugins at runtime
-
-2. Supabase Integration
-
-Automatic Saving: All analyses saved to database
-Historical Retrieval: Query past analyses
-Zone Storage: Individual zones for detailed queries
-Performance Indexed: Optimized for symbol/date queries
-JSON Storage: Flexible schema for plugin results
-
-3. Usage Examples
-python# Example: Disable a plugin at runtime
-orchestrator = SystemOrchestrator()
-orchestrator.configure_plugins({
-    'HVN7DayPlugin': {'enabled': False}
-})
-
-# Example: Add custom plugin
-orchestrator.add_custom_plugin('plugins.my_vwap_plugin')
-
-# Example: Run analysis with database save
-results = orchestrator.run_complete_analysis(
-    'AAPL',
-    {'current_price': 150.00, 'daily_atr': 2.5},
-    save_to_db=True
+# Run zone discovery
+zones = self.discovery_engine.discover_zones(
+    scan_low=scan_low,
+    scan_high=scan_high,
+    current_price=metrics.current_price,
+    atr_15min=metrics.atr_m15,
+    confluence_sources=confluence_sources,
+    poc_zones=poc_zones  # ADD THIS PARAMETER
 )
 
-# Example: Retrieve historical analyses
-history = orchestrator.get_historical_analysis('AAPL', days_back=30)
-This complete implementation provides:
+PHASE 5: Update Orchestrator (30 minutes)
+File: confluence_scanner/orchestrator.py
+STEP 5.1: Add POC mode parameter to run_analysis
+Modify the run_analysis() method signature (around line 50):
+pythondef run_analysis(self, 
+            symbol: str,
+            analysis_datetime: Optional[datetime] = None,
+            fractal_data: Optional[Dict] = None,
+            weekly_levels: Optional[List[float]] = None,
+            daily_levels: Optional[List[float]] = None,
+            lookback_days: int = 30,
+            merge_overlapping: bool = True,
+            merge_identical: bool = False,
+            use_hvn_poc_mode: bool = True,  # ADD THIS
+            hvn_zone_width_multiplier: float = 0.3) -> ScanResult:  # ADD THIS
+STEP 5.2: Configure scanner for POC mode
+Before calling self.scanner.scan() (around line 100), ADD:
+python# Configure scanner for HVN POC mode if requested
+if use_hvn_poc_mode:
+    self.scanner.hvn_poc_mode = True
+    self.scanner.hvn_poc_zone_width_multiplier = hvn_zone_width_multiplier
+    self.discovery_engine.discovery_mode = 'hvn_anchor'
+    logger.info(f"[Confluence] Using HVN POC anchor mode with {hvn_zone_width_multiplier}x M15 ATR zones")
+else:
+    self.scanner.hvn_poc_mode = False
+    self.discovery_engine.discovery_mode = 'cluster'
+    logger.info("[Confluence] Using traditional clustering mode")
 
-Full modularity for confluence calculations via plugin system
-Complete Supabase integration for results persistence
-Runtime configuration without code changes
+PHASE 6: Update CLI Interface (45 minutes)
+File: confluence_cli.py
+STEP 6.1: Add command line arguments for POC mode
+In the parse_arguments() function, after the existing arguments (around line 80), ADD:
+pythonparser.add_argument(
+    '--hvn-poc-mode',
+    action='store_true',
+    default=True,
+    help='Use HVN POC anchoring mode (default: True)'
+)
+
+parser.add_argument(
+    '--no-hvn-poc-mode',
+    action='store_false',
+    dest='hvn_poc_mode',
+    help='Disable HVN POC mode and use traditional clustering'
+)
+
+parser.add_argument(
+    '--hvn-zone-width',
+    type=float,
+    default=0.3,
+    help='HVN zone width as multiplier of M15 ATR (default: 0.3 for ~5min ATR)'
+)
+
+parser.add_argument(
+    '--hvn-timeframe',
+    type=int,
+    default=7,
+    choices=[3, 5, 7, 10, 14],
+    help='Days for HVN analysis (default: 7)'
+)
+STEP 6.2: Pass POC parameters to analysis
+In the run_analysis() function where confluence_orch.run_analysis() is called (around line 200), MODIFY:
+pythonconfluence_result = confluence_orch.run_analysis(
+    symbol=args.ticker,
+    analysis_datetime=analysis_time_naive,
+    fractal_data=fractal_results,
+    weekly_levels=args.weekly_levels,
+    daily_levels=args.daily_levels,
+    lookback_days=args.lookback,
+    merge_overlapping=merge_overlapping,
+    merge_identical=merge_identical,
+    use_hvn_poc_mode=args.hvn_poc_mode,  # ADD THIS
+    hvn_zone_width_multiplier=args.hvn_zone_width  # ADD THIS
+)
+STEP 6.3: Update display to show POC information
+In the display_terminal_output() function, after the statistics section (around line 350), ADD:
+python# Display HVN POC mode information
+if results.get('metadata', {}).get('hvn_poc_mode'):
+    print(f"\nHVN POC Anchor Mode:")
+    print(f"  Timeframe: {results['metadata'].get('hvn_timeframe', 7)} days")
+    print(f"  Zone Width: {results['metadata'].get('hvn_zone_width', 0.3)}x M15 ATR")
+    print(f"  Anchor Zones: {results['statistics'].get('poc_anchor_zones', 0)}")
+
+PHASE 7: Update Configuration File (15 minutes)
+File: confluence_scanner/config.py
+STEP 7.1: Add POC mode configuration
+After the existing configuration parameters (around line 40), ADD:
+python# HVN POC Anchor Mode Configuration
+HVN_POC_MODE_ENABLED = True  # Use HVN POC anchoring by default
+HVN_POC_TIMEFRAME_DAYS = 7  # 7-day volume profile for POCs
+HVN_POC_ZONE_WIDTH_MULTIPLIER = 0.3  # ~5min ATR as fraction of 15min ATR
+HVN_POC_MIN_ZONES = 6  # Minimum POC zones to create
+HVN_POC_MIN_CONFLUENCE_LEVEL = 'L3'  # Minimum level for output
+
+# POC Zone Discovery Weights (when in POC mode)
+POC_MODE_WEIGHTS = {
+    'hvn_poc': 3.0,  # Base weight for POC itself
+    'fractal': 2.5,  # Fractal overlap weight
+    'cam-monthly': 2.0,
+    'cam-weekly': 1.5,
+    'cam-daily': 1.0,
+    'weekly': 2.0,
+    'daily-zone': 1.0,
+    'daily-level': 0.5,
+    'atr': 1.0,
+    'market-structure': 0.8
+}
+
+TESTING CHECKPOINTS
+Checkpoint 1: After Phase 1-2 (HVN POC Creation)
+bash# Test POC extraction
+python -c "
+from confluence_scanner.calculations.volume.hvn_engine import HVNEngine
+from confluence_scanner.data.polygon_client import PolygonClient
+import pandas as pd
+
+client = PolygonClient()
+df = client.fetch_bars('SPY', '2025-01-01', '2025-01-15', '5min')
+if df is not None:
+    df['timestamp'] = df.index
+    engine = HVNEngine()
+    result = engine.create_poc_anchor_zones(df, timeframe_days=7, zone_width_atr=0.5)
+    print(f'Created {len(result[\"poc_zones\"])} POC zones')
+"
+Checkpoint 2: After Phase 3 (Zone Discovery)
+bash# Test with simple command
+python confluence_cli.py SPY 2025-01-15 14:30 \
+    -w 450.0 445.0 440.0 435.0 \
+    -d 455.0 452.0 448.0 446.0 444.0 442.0 \
+    --hvn-poc-mode \
+    --output terminal
+Checkpoint 3: Full Integration Test
+bash# Full test with all parameters
+python confluence_cli.py TSLA 2025-01-15 14:30 \
+    -w 340.0 335.0 330.0 325.0 \
+    -d 345.0 342.0 338.0 335.0 332.0 328.0 \
+    --hvn-poc-mode \
+    --hvn-zone-width 0.3 \
+    --hvn-timeframe 7 \
+    --output json \
+    --save-file tsla_poc_analysis.json
+
+ROLLBACK PLAN
+If issues arise, the original functionality is preserved by:
+
+Setting --no-hvn-poc-mode flag in CLI
+Or setting discovery_mode = 'cluster' in code
+All original methods remain intact
+
+
+SUCCESS CRITERIA
+The implementation is successful when:
+
+✓ 7-day HVN POCs are identified correctly
+✓ POC zones are created with configurable width (5-min ATR)
+✓ Other confluence sources overlap check with POC zones
+✓ Output shows 3 L3+ zones above and 3 below current price
+✓ Zones are clearly marked as HVN-anchored
+✓ Original clustering mode still works with flag
+
+
+COMMON ISSUES AND SOLUTIONS
+Issue 1: No POC zones created
+Solution: Check that 5-minute data is available for the 7-day period
+Issue 2: All zones below L3
+Solution: Adjust POC_MODE_WEIGHTS in config.py to increase base scores
+Issue 3: Too many/few zones
+Solution: Adjust HVN_POC_MIN_ZONES parameter
+Issue 4: Import errors
+Solution: Ensure all imports include full paths from confluence_scanner
+
+This implementation plan provides Claude with exact, step-by-step instructions to transform your system to HVN POC-anchored zone discovery while preserving the original functionality as a fallback option.

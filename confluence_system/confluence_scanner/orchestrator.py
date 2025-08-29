@@ -82,7 +82,9 @@ class ConfluenceOrchestrator:
                 daily_levels: Optional[List[float]] = None,
                 lookback_days: int = 30,
                 merge_overlapping: bool = True,
-                merge_identical: bool = False) -> ScanResult:
+                merge_identical: bool = False,
+                use_hvn_poc_mode: bool = True,
+                hvn_zone_width_multiplier: float = 0.5) -> ScanResult:
         """
         Main entry point for confluence analysis
         Properly integrates fractals as confluence source
@@ -133,6 +135,15 @@ class ConfluenceOrchestrator:
                         metrics.atr_m15  # Can be removed after fractal_integration fix
                     )
                     logger.info(f"Prepared {len(additional_confluence.get('fractals', []))} fractal confluence items")
+            
+            # Configure scanner for HVN POC mode if requested
+            if use_hvn_poc_mode:
+                self.scanner.hvn_poc_mode = True
+                self.scanner.hvn_poc_zone_width_multiplier = hvn_zone_width_multiplier
+                logger.info(f"[Confluence] Using HVN POC anchor mode with {hvn_zone_width_multiplier}x M15 ATR zones")
+            else:
+                self.scanner.hvn_poc_mode = False
+                logger.info("[Confluence] Using traditional clustering mode")
             
             # Run the scan with all confluence sources
             result = self.scanner.scan(

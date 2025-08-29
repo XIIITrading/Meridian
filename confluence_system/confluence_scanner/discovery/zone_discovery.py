@@ -25,6 +25,7 @@ class Zone:
     distance_percentage: float
     best_candle: Optional[Dict] = None
     recency_score: float = 1.0
+    metadata: Optional[Dict] = None
 
 
 class ZoneDiscoveryEngine:
@@ -32,26 +33,46 @@ class ZoneDiscoveryEngine:
     Zone discovery with configurable overlap merging
     """
     
-    def __init__(self, merge_overlapping: bool = False, merge_identical: bool = True):
+    def __init__(self, merge_overlapping: bool = False, merge_identical: bool = True,
+                 discovery_mode: str = 'cluster'):
         """
         Initialize zone discovery engine
         
         Args:
-            merge_overlapping: If True, merge zones that overlap. If False, keep all zones separate
-            merge_identical: If True, merge items at identical prices (within $0.10)
+            merge_overlapping: If True, merge zones that overlap
+            merge_identical: If True, merge items at identical prices
+            discovery_mode: 'cluster' (original) or 'hvn_anchor' (new)
         """
         self.merge_overlapping = merge_overlapping
         self.merge_identical = merge_identical
-        self.identical_threshold = 0.10  # Consider prices within $0.10 as identical
-        logger.info(f"ZoneDiscoveryEngine initialized - Merge overlapping: {merge_overlapping}, "
-                   f"Merge identical: {merge_identical}")
+        self.identical_threshold = 0.10
+        self.discovery_mode = discovery_mode
+        
+        # Confluence weights for HVN POC mode
+        self.confluence_weights = {
+            'hvn_poc': 3.0,
+            'fractal': 2.5,
+            'cam-monthly': 2.0,
+            'cam-weekly': 1.5,
+            'cam-daily': 1.0,
+            'weekly': 2.0,
+            'daily-zone': 1.0,
+            'daily-level': 0.5,
+            'atr': 1.0,
+            'market-structure': 0.8
+        }
+        
+        logger.info(f"ZoneDiscoveryEngine initialized - Mode: {discovery_mode}, "
+                    f"Merge overlapping: {merge_overlapping}, "
+                    f"Merge identical: {merge_identical}")
     
     def discover_zones(self,
                       scan_low: float,
                       scan_high: float,
                       current_price: float,
                       atr_15min: float,
-                      confluence_sources: Dict[str, List[Dict]]) -> List[Zone]:
+                      confluence_sources: Dict[str, List[Dict]],
+                      poc_zones: Optional[List[Dict]] = None) -> List[Zone]:
         """
         Discover zones from confluence sources
         
@@ -59,12 +80,20 @@ class ZoneDiscoveryEngine:
             scan_low: Lower bound of scan range
             scan_high: Upper bound of scan range
             current_price: Current market price
-            atr_15min: 15-minute ATR (not used for merging, only for info)
+            atr_15min: 15-minute ATR
             confluence_sources: Dictionary of source type to items
+            poc_zones: Optional POC zones for HVN-anchored mode
             
         Returns:
             List of Zone objects
         """
+        # Use HVN-anchored mode if POC zones provided and mode is set
+        if self.discovery_mode == 'hvn_anchor' and poc_zones:
+            return self.discover_hvn_anchored_zones(
+                poc_zones, current_price, atr_15min, confluence_sources
+            )
+        
+        # Otherwise use original clustering mode
         # Flatten all confluence items
         all_items = []
         for source_type, items in confluence_sources.items():
@@ -99,6 +128,135 @@ class ZoneDiscoveryEngine:
         
         logger.info(f"Discovered {len(zones)} zones")
         return zones
+    
+    def discover_hvn_anchored_zones(self,
+                                   poc_zones: List[Dict],
+                                   current_price: float,
+                                   atr_15min: float,
+                                   confluence_sources: Dict[str, List[Dict]]) -> List[Zone]:
+        """
+        Discover zones using HVN POCs as anchors
+        
+        Args:
+            poc_zones: POC anchor zones from HVN analysis
+            current_price: Current market price
+            atr_15min: 15-minute ATR
+            confluence_sources: All other confluence sources to check
+            
+        Returns:
+            List of Zone objects with confluence scoring
+        """
+        logger.info(f"Starting HVN-anchored discovery with {len(poc_zones)} POC zones")
+        
+        zones = []
+        zone_id = 0
+        
+        for poc_zone in poc_zones:
+            # Initialize confluence tracking for this POC zone
+            overlapping_items = []
+            confluence_types = set()
+            
+            # Check each confluence source for overlap with POC zone
+            for source_type, items in confluence_sources.items():
+                # Skip HVN sources as they're already our anchors
+                if 'hvn' in source_type.lower():
+                    continue
+                    
+                for item in items:
+                    # Check if item overlaps with POC zone
+                    item_low = item.get('low', item.get('level', 0))
+                    item_high = item.get('high', item.get('level', 0))
+                    
+                    # Calculate overlap
+                    if item_low <= poc_zone['zone_high'] and item_high >= poc_zone['zone_low']:
+                        overlapping_items.append(item)
+                        confluence_types.add(source_type)
+            
+            # Calculate confluence score based on overlapping items
+            base_score = 3.0  # Base score for being an HVN POC
+            
+            # Add score for each overlapping item
+            for item in overlapping_items:
+                item_weight = self.confluence_weights.get(item.get('type', 'unknown'), 1.0)
+                base_score += item_weight
+            
+            # Apply diversity bonus
+            if len(confluence_types) > 1:
+                diversity_bonus = 1.0 + (len(confluence_types) - 1) * 0.1
+                confluence_score = base_score * diversity_bonus
+            else:
+                confluence_score = base_score
+            
+            # Determine confluence level
+            if confluence_score >= 12.0:
+                confluence_level = 'L5'
+            elif confluence_score >= 8.0:
+                confluence_level = 'L4'
+            elif confluence_score >= 5.0:
+                confluence_level = 'L3'
+            elif confluence_score >= 2.5:
+                confluence_level = 'L2'
+            else:
+                confluence_level = 'L1'
+            
+            # Create zone object
+            zone = Zone(
+                zone_id=zone_id,
+                zone_low=poc_zone['zone_low'],
+                zone_high=poc_zone['zone_high'],
+                center_price=poc_zone['poc_price'],
+                zone_width=poc_zone['zone_width'],
+                zone_type='resistance' if poc_zone['poc_price'] > current_price else 'support',
+                confluence_level=confluence_level,
+                confluence_score=confluence_score,
+                confluent_sources=[
+                    {
+                        'type': 'hvn_poc',
+                        'name': poc_zone['zone_id'],
+                        'level': poc_zone['poc_price'],
+                        'strength': poc_zone['poc_volume_pct']
+                    }
+                ] + overlapping_items,
+                distance_from_price=abs(poc_zone['poc_price'] - current_price),
+                distance_percentage=abs(poc_zone['poc_price'] - current_price) / current_price * 100,
+                recency_score=1.0
+            )
+            
+            # Add metadata for HVN anchor zones
+            zone.metadata = {
+                'is_hvn_anchor': True,
+                'hvn_rank': poc_zone['rank'],
+                'hvn_volume_pct': poc_zone['poc_volume_pct'],
+                'timeframe_weight': poc_zone.get('timeframe_weight', 1.0),
+                'timeframe_days': poc_zone.get('timeframe_days', 7)
+            }
+            
+            zones.append(zone)
+            zone_id += 1
+        
+        # Sort all zones by confluence score first
+        zones.sort(key=lambda x: x.confluence_score, reverse=True)
+        
+        # Take zones with any confluence (including L1 and L2 if needed)
+        candidate_zones = zones  # Use all zones, not just L3+
+        
+        # Sort by distance first, then by recency
+        for zone in candidate_zones:
+            zone.sort_key = (
+                zone.distance_from_price,  # Primary: closest first
+                -zone.metadata.get('timeframe_weight', 0)  # Secondary: highest weight first
+            )
+        
+        candidate_zones.sort(key=lambda z: z.sort_key)
+        
+        # Take the 6 closest zones regardless of position or confluence level
+        final_zones = candidate_zones[:6]
+        
+        logger.info(f"Selected {len(final_zones)} zones (closest to price): "
+                    f"{len([z for z in final_zones if z.center_price > current_price])} above, "
+                    f"{len([z for z in final_zones if z.center_price < current_price])} below")
+        
+        return final_zones
     
     def _create_individual_zones(self, items: List[Dict], current_price: float) -> List[Zone]:
         """

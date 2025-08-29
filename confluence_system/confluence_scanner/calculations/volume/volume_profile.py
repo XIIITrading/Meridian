@@ -13,6 +13,9 @@ from datetime import datetime, timedelta
 from typing import Dict, Tuple, Optional, List
 from dataclasses import dataclass
 
+import logging
+logger = logging.getLogger(__name__)
+
 @dataclass
 class PriceLevel:
     """Container for price level information"""
@@ -254,6 +257,52 @@ class VolumeProfile:
         return sorted(self.price_levels, 
                      key=lambda x: x.percent_of_total, 
                      reverse=True)[:n]
+    
+    def get_poc(self) -> Optional[PriceLevel]:
+        """
+        Get the Point of Control (POC) - the price level with maximum volume
+        
+        Returns:
+            PriceLevel object with highest volume, or None if no levels
+        """
+        if not self.price_levels:
+            return None
+        
+        # Find the level with maximum volume
+        poc_level = max(self.price_levels, key=lambda x: x.volume)
+        
+        # Log POC information (add logger import at top if needed)
+        print(f"POC identified at ${poc_level.center:.2f} with "
+            f"{poc_level.percent_of_total:.2f}% of total volume")
+        
+        return poc_level
+
+    def get_multiple_pocs(self, count: int = 6) -> List[PriceLevel]:
+        """
+        Get multiple POCs (highest volume levels) for zone creation
+        
+        Args:
+            count: Number of POCs to return
+            
+        Returns:
+            List of PriceLevel objects sorted by volume (highest first)
+        """
+        if not self.price_levels:
+            return []
+        
+        # Sort by volume and take top N
+        sorted_levels = sorted(self.price_levels, 
+                            key=lambda x: x.volume, 
+                            reverse=True)
+        
+        # Take requested count
+        pocs = sorted_levels[:count]
+        
+        # Log the POCs
+        for i, poc in enumerate(pocs, 1):
+            print(f"POC {i}: ${poc.center:.2f} ({poc.percent_of_total:.2f}% volume)")
+        
+        return pocs
     
     def get_levels_above_threshold(self, threshold: float) -> List[PriceLevel]:
         """

@@ -1,0 +1,170 @@
+{
+  "symbol": "TSLA",
+  "analysis_time": "2025-08-28T12:30:00+00:00",
+  "current_price": 350.0,
+  "parameters": {
+    "weekly_levels": [
+      354.91,
+      335.0,
+      315.55,
+      286.03
+    ],
+    "daily_levels": [
+      365.36,
+      340.45,
+      334.34,
+      319.51
+    ],
+    "fractal_length": 11,
+    "atr_distance": 1.0,
+    "lookback_days": 30,
+    "merge_mode": "overlap"
+  },
+  "metrics": {
+    "atr_daily": 11.012458694414173,
+    "atr_15min": 2.03719014033754
+  },
+  "statistics": {
+    "total_fractals": 17,
+    "confluence_zones": 18,
+    "trading_levels": 8
+  },
+  "levels": [
+    {
+      "low": 350.85,
+      "high": 351.5,
+      "confluence": "L5",
+      "score": 16.623734354393882,
+      "distance_pct": 0.24285714285714935,
+      "type": "low",
+      "priority": 32.843749445895334,
+      "confluence_sources": [
+        "PDC",
+        "HVN_7D",
+        "Weekly_Cam",
+        "Monthly_Cam",
+        "ONH",
+        "FractalLow_0827_0845",
+        "HVN_30D",
+        "HVN_14D",
+        "Daily_Cam"
+      ],
+      "source_count": 9
+    },
+    {
+      "low": 334.4375413055858,
+      "high": 335.0375413055858,
+      "confluence": "L4",
+      "score": 12.644013663603952,
+      "distance_pct": 4.360702484118341,
+      "type": "zone_support",
+      "priority": 23.729218977597,
+      "confluence_sources": [
+        "Daily_Level",
+        "Daily_Zone",
+        "ATR_Zone",
+        "Weekly_Cam",
+        "Monthly_Cam",
+        "Weekly_Zone",
+        "HVN_30D",
+        "HVN_14D"
+      ],
+      "source_count": 8
+    },
+    {
+      "low": 356.0455268822915,
+      "high": 356.6455268822915,
+      "confluence": "L3",
+      "score": 10.799999999999999,
+      "distance_pct": 1.8130076806547126,
+      "type": "zone_resistance",
+      "priority": 23.570342045871488,
+      "confluence_sources": [
+        "Weekly_Zone",
+        "Weekly_Cam",
+        "Monthly_Cam",
+        "PDH",
+        "Daily_Cam",
+        "ATR_Zone"
+      ],
+      "source_count": 6
+    },
+    {
+      "low": 347.59401549298315,
+      "high": 348.19401549298317,
+      "confluence": "L3",
+      "score": 9.817647639311398,
+      "distance_pct": 0.6017098591476692,
+      "type": "zone_support",
+      "priority": 22.85346928896197,
+      "confluence_sources": [
+        "Weekly_Cam",
+        "Monthly_Cam",
+        "Daily_Cam",
+        "HVN_7D",
+        "HVN_30D",
+        "HVN_14D"
+      ],
+      "source_count": 6
+    },
+    {
+      "low": 338.77,
+      "high": 341.9,
+      "confluence": "L3",
+      "score": 12.32,
+      "distance_pct": 2.3142857142857207,
+      "type": "high",
+      "priority": 21.788799999999995,
+      "confluence_sources": [
+        "Weekly_Cam",
+        "Monthly_Cam",
+        "Daily_Cam",
+        "Daily_Zone",
+        "FractalHigh_0825_0800"
+      ],
+      "source_count": 5
+    },
+    {
+      "low": 360.0368723621016,
+      "high": 360.6368723621016,
+      "confluence": "L1",
+      "score": 5.28,
+      "distance_pct": 2.9533921034575963,
+      "type": "zone_resistance",
+      "priority": 10.800730763249266,
+      "confluence_sources": [
+        "Weekly_Cam",
+        "Monthly_Cam"
+      ],
+      "source_count": 2
+    },
+    {
+      "low": 345.44,
+      "high": 345.75,
+      "confluence": "L1",
+      "score": 2.3306289266312996,
+      "distance_pct": 1.2142857142857142,
+      "type": "high",
+      "priority": 4.378252912171655,
+      "confluence_sources": [
+        "ONL",
+        "HVN_7D",
+        "FractalHigh_0826_1030"
+      ],
+      "source_count": 3
+    },
+    {
+      "low": 343.91,
+      "high": 344.7,
+      "confluence": "L0",
+      "score": 0.4,
+      "distance_pct": 1.7399999999999929,
+      "type": "low",
+      "priority": 0.7304000000000004,
+      "confluence_sources": [
+        "FractalLow_0826_0800"
+      ],
+      "source_count": 1
+    }
+  ]
+}

@@ -15,6 +15,12 @@ from ..calculations.zones.weekly_zone_calc import WeeklyZoneCalculator
 from ..calculations.zones.daily_zone_calc import DailyZoneCalculator
 from ..calculations.zones.atr_zone_calc import ATRZoneCalculator
 from ..calculations.market_structure.pd_market_structure import MarketStructureCalculator
+from ..config import (
+    HVN_POC_MODE_ENABLED,
+    HVN_POC_ZONE_WIDTH_MULTIPLIER,
+    HVN_POC_MIN_ZONES,
+    HVN_POC_OVERLAP_THRESHOLD
+)
 
 logger = logging.getLogger(__name__)
 
@@ -77,6 +83,13 @@ class ZoneScanner:
         # Merge Configuration (default values)
         self.default_merge_overlapping = True
         self.default_merge_identical = False
+
+        # HVN POC Zone Configuration (from config)
+        self.hvn_poc_mode = HVN_POC_MODE_ENABLED
+        self.hvn_poc_zone_width_multiplier = HVN_POC_ZONE_WIDTH_MULTIPLIER
+        self.hvn_poc_min_zones = HVN_POC_MIN_ZONES
+        self.hvn_poc_overlap_threshold = HVN_POC_OVERLAP_THRESHOLD
+        self.hvn_poc_timeframe = 7  # Days for HVN analysis
         
         # ================================================================
         
@@ -190,6 +203,57 @@ class ZoneScanner:
         # Collect ALL confluence items in a single list
         all_confluence_items = []
         source_counts = {}
+
+        # 0. CREATE HVN POC ANCHOR ZONES (if in POC mode)
+        poc_zones = []
+        if self.hvn_poc_mode:
+            try:
+                logger.info("Creating multi-timeframe HVN POC anchor zones...")
+                
+                # Calculate 5-minute ATR approximation
+                atr_5min = metrics.atr_m15 * self.hvn_poc_zone_width_multiplier
+                
+                # Collect POCs from multiple timeframes
+                timeframe_configs = [
+                    (7, 1.0),   # 7-day: highest priority
+                    (14, 0.7),  # 14-day: medium priority  
+                    (30, 0.5)   # 30-day: lowest priority
+                ]
+                
+                all_poc_zones = []
+                
+                for timeframe_days, weight in timeframe_configs:
+                    end_date = analysis_datetime.strftime('%Y-%m-%d')
+                    start_date = (analysis_datetime - timedelta(days=timeframe_days)).strftime('%Y-%m-%d')
+                    
+                    df = self.polygon_client.fetch_bars(ticker, start_date, end_date, '5min')
+                    if df is not None and not df.empty:
+                        df['timestamp'] = df.index
+                        
+                        poc_result = self.hvn_engine.create_poc_anchor_zones(
+                            df,
+                            timeframe_days=timeframe_days,
+                            zone_width_atr=atr_5min,
+                            min_zones=6
+                        )
+                        
+                        timeframe_pocs = poc_result.get('poc_zones', [])
+                        for poc in timeframe_pocs:
+                            poc['timeframe_weight'] = weight
+                            poc['distance_to_price'] = abs(poc['poc_price'] - metrics.current_price)
+                        
+                        all_poc_zones.extend(timeframe_pocs)
+                        logger.info(f"Found {len(timeframe_pocs)} POCs from {timeframe_days}-day timeframe")
+                
+                # Filter overlapping POCs - keep higher weighted
+                poc_zones = self._filter_overlapping_pocs(all_poc_zones, overlap_threshold=0.005)
+                
+                source_counts['hvn_poc_anchors'] = len(poc_zones)
+                logger.info(f"Using {len(poc_zones)} POC anchor zones after overlap filtering")
+                
+            except Exception as e:
+                logger.error(f"POC zone creation failed: {e}")
+                poc_zones = []
         
         # 1. HVN PEAKS
         try:
@@ -424,14 +488,23 @@ class ZoneScanner:
         
         # Set merge mode on discovery engine
         self.discovery_engine.set_merge_mode(merge_overlapping, merge_identical)
-        
+
+        # Set discovery mode based on configuration
+        if self.hvn_poc_mode and poc_zones:
+            self.discovery_engine.discovery_mode = 'hvn_anchor'
+            logger.info(f"Using HVN POC anchor mode with {len(poc_zones)} anchor zones")
+        else:
+            self.discovery_engine.discovery_mode = 'cluster'
+            logger.info("Using traditional clustering mode")
+
         # Run zone discovery
         zones = self.discovery_engine.discover_zones(
             scan_low=scan_low,
             scan_high=scan_high,
             current_price=metrics.current_price,
             atr_15min=metrics.atr_m15,
-            confluence_sources=confluence_sources
+            confluence_sources=confluence_sources,
+            poc_zones=poc_zones  # ADD THIS PARAMETER
         )
         
         logger.info(f"Discovered {len(zones)} zones with full confluence including market structure")
@@ -446,6 +519,33 @@ class ZoneScanner:
             "analysis_datetime": analysis_datetime
         }
     
+    def _filter_overlapping_pocs(self, poc_zones: List[Dict], overlap_threshold: float = 0.005) -> List[Dict]:
+        """
+        Filter overlapping POCs, keeping only the highest weighted one
+        """
+        if not poc_zones:
+            return []
+        
+        # Sort by weight (highest first), then by distance (closest first)
+        sorted_pocs = sorted(poc_zones, 
+                            key=lambda x: (-x.get('timeframe_weight', 1.0), x.get('distance_to_price', 0)))
+        
+        filtered = []
+        
+        for poc in sorted_pocs:
+            # Check if this POC overlaps with any already selected
+            is_overlap = False
+            for selected_poc in filtered:
+                price_diff = abs(poc['poc_price'] - selected_poc['poc_price']) / selected_poc['poc_price']
+                if price_diff <= overlap_threshold:
+                    is_overlap = True
+                    break
+            
+            if not is_overlap:
+                filtered.append(poc)
+        
+        return filtered
+
     def format_result(self, result: Dict) -> str:
         """Format scan results for display with market structure"""
         if 'error' in result:
@@ -487,6 +587,12 @@ class ZoneScanner:
                     # Add special indicator for market structure
                     indicator = "📊" if source == 'market_structure' else "✓"
                     output.append(f"  {indicator} {source}: {count} items")
+        
+        # Show POC anchor information if available
+        if 'hvn_poc_anchors' in result.get('confluence_counts', {}):
+            poc_count = result['confluence_counts']['hvn_poc_anchors']
+            if poc_count > 0:
+                output.append(f"\n HVN POC Anchors: {poc_count} zones")
         
         # Zones
         if 'zones' in result:

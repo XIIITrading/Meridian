@@ -14,7 +14,7 @@ from ..calculations.pivots.camarilla_engine import CamarillaEngine
 from ..calculations.zones.weekly_zone_calc import WeeklyZoneCalculator
 from ..calculations.zones.daily_zone_calc import DailyZoneCalculator
 from ..calculations.zones.atr_zone_calc import ATRZoneCalculator
-from ..calculations.market_structure import MarketStructureCalculator
+from ..calculations.market_structure.pd_market_structure import MarketStructureCalculator
 
 logger = logging.getLogger(__name__)
 
@@ -44,12 +44,12 @@ class ZoneScanner:
         # All are multiplied by the 15-minute ATR (atr_m15)
         
         # HVN Peak Zone Widths
-        self.hvn_zone_multiplier = 0.3  # Narrow zones for volume peaks
+        self.hvn_zone_multiplier = 0.15  # Narrow zones for volume peaks
         
         # Camarilla Pivot Zone Widths (full width, will be halved for +/-)
         self.camarilla_monthly_multiplier = 0.5  
         self.camarilla_weekly_multiplier = 0.4   
-        self.camarilla_daily_multiplier = 0.2    
+        self.camarilla_daily_multiplier = 0.15    
         
         # Weekly Level Zone Width
         self.weekly_zone_multiplier = 0.5  

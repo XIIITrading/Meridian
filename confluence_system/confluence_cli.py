@@ -109,6 +109,73 @@ def parse_arguments():
     return parser.parse_args()
 
 
+def extract_confluence_sources(level) -> List[str]:
+    """Extract specific confluence sources from a trading level"""
+    sources = []
+    
+    # Check direct flags first
+    if level.has_hvn:
+        sources.append("HVN")
+    if level.has_camarilla:
+        sources.append("Camarilla")
+    if level.has_weekly:
+        sources.append("Weekly")
+    if level.has_daily:
+        sources.append("Daily")
+    if level.has_atr:
+        sources.append("ATR")
+    
+    # Extract detailed sources from overlapping zones
+    detailed_sources = []
+    if hasattr(level, 'overlapping_zones') and level.overlapping_zones:
+        for overlap in level.overlapping_zones:
+            if 'zone_sources' in overlap:
+                for source in overlap['zone_sources']:
+                    source_type = source.get('type', '')
+                    source_name = source.get('name', '')
+                    
+                    # Map types to readable names
+                    if 'hvn-7' in source_type:
+                        detailed_sources.append("HVN_7D")
+                    elif 'hvn-14' in source_type:
+                        detailed_sources.append("HVN_14D")
+                    elif 'hvn-30' in source_type:
+                        detailed_sources.append("HVN_30D")
+                    elif 'cam-daily' in source_type:
+                        detailed_sources.append("Daily_Cam")
+                    elif 'cam-weekly' in source_type:
+                        detailed_sources.append("Weekly_Cam")
+                    elif 'cam-monthly' in source_type:
+                        detailed_sources.append("Monthly_Cam")
+                    elif 'weekly' in source_type:
+                        detailed_sources.append("Weekly_Zone")
+                    elif 'daily-zone' in source_type:
+                        detailed_sources.append("Daily_Zone")
+                    elif 'daily-level' in source_type:
+                        detailed_sources.append("Daily_Level")
+                    elif 'atr' in source_type:
+                        detailed_sources.append("ATR_Zone")
+                    elif 'market-structure' in source_type:
+                        if 'PDH' in source_name:
+                            detailed_sources.append("PDH")
+                        elif 'PDL' in source_name:
+                            detailed_sources.append("PDL")
+                        elif 'PDC' in source_name:
+                            detailed_sources.append("PDC")
+                        elif 'ONH' in source_name:
+                            detailed_sources.append("ONH")
+                        elif 'ONL' in source_name:
+                            detailed_sources.append("ONL")
+                        else:
+                            detailed_sources.append(source_name)
+                    elif source_name:
+                        detailed_sources.append(source_name)
+    
+    # DEDUPLICATE: Remove duplicates while preserving order
+    final_sources = detailed_sources if detailed_sources else sources
+    return list(dict.fromkeys(final_sources))  # Removes duplicates, preserves order
+
+
 def run_analysis(args) -> Dict:
     """Run the complete analysis pipeline - modeled after test_zone_identification.py"""
     
@@ -284,8 +351,10 @@ def run_analysis(args) -> Dict:
         'levels': []
     }
     
-    # Add trading levels to output
+    # Add trading levels to output WITH confluence sources
     for level in sorted(trading_levels, key=lambda x: x.priority_score, reverse=True)[:20]:
+        confluence_sources = extract_confluence_sources(level)
+        
         output_data['levels'].append({
             'low': level.low_price,
             'high': level.high_price,
@@ -293,7 +362,9 @@ def run_analysis(args) -> Dict:
             'score': level.confluence_score,
             'distance_pct': level.distance_percentage,
             'type': level.fractal_type,
-            'priority': level.priority_score
+            'priority': level.priority_score,
+            'confluence_sources': confluence_sources,  # NEW: Added confluence sources
+            'source_count': len(confluence_sources)     # NEW: Added source count
         })
     
     return output_data
@@ -323,20 +394,44 @@ def display_terminal_output(results: Dict):
         table_data = []
         for i, level in enumerate(results['levels'][:10], 1):
             direction = "RES" if level['low'] > results['current_price'] else "SUP"
+            
+            # Format confluence sources for display
+            sources_str = ", ".join(level.get('confluence_sources', []))
+            if not sources_str:
+                sources_str = "No confluence"
+            
             table_data.append([
                 i,
                 level['confluence'],
                 direction,
                 f"${level['low']:.2f}-${level['high']:.2f}",
                 f"{level['score']:.1f}",
-                f"{abs(level['distance_pct']):.1f}%"
+                f"{abs(level['distance_pct']):.1f}%",
+                sources_str[:40] + "..." if len(sources_str) > 40 else sources_str  # Truncate long lists
             ])
         
         print(tabulate(
             table_data,
-            headers=['Rank', 'Level', 'Type', 'Price Range', 'Score', 'Distance'],
-            tablefmt='grid'
+            headers=['Rank', 'Level', 'Type', 'Price Range', 'Score', 'Distance', 'Confluence Sources'],
+            tablefmt='grid',
+            colalign=['center', 'center', 'center', 'center', 'center', 'center', 'left']
         ))
+        
+        # Show detailed confluence breakdown for top 5 levels
+        print("\n" + "=" * 80)
+        print("DETAILED CONFLUENCE BREAKDOWN (Top 5)")
+        print("=" * 80)
+        
+        for i, level in enumerate(results['levels'][:5], 1):
+            direction = "RESISTANCE" if level['low'] > results['current_price'] else "SUPPORT"
+            print(f"\n#{i} - {level['confluence']} {direction} @ ${level['low']:.2f}-${level['high']:.2f}")
+            print(f"    Score: {level['score']:.1f} | Distance: {abs(level['distance_pct']):.1f}%")
+            
+            sources = level.get('confluence_sources', [])
+            if sources:
+                print(f"    Confluence Sources ({len(sources)}): {', '.join(sources)}")
+            else:
+                print("    No confluence sources identified")
     
     print("\n" + "=" * 80)
 

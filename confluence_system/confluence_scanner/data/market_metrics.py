@@ -252,7 +252,7 @@ class MetricsCalculator:
             Dictionary with structure levels
         """
         try:
-            from ..calculations.market_structure import MarketStructureCalculator
+            from ..calculations.market_structure.pd_market_structure import MarketStructureCalculator
             
             calculator = MarketStructureCalculator()
             structure_levels = calculator.calculate_all_levels(

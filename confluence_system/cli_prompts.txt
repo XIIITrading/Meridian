@@ -1,0 +1,194 @@
+# PowerShell Templates for Confluence CLI with Sierra Chart Auto-Export
+# Author: XIII Trading Systems
+# Usage: Copy and modify the template for your analysis
+
+# =============================================================================
+# TEMPLATE 1: Full Analysis with All Parameters
+# =============================================================================
+
+# TSLA Example - Full Command Template
+python -m confluence_system.confluence_cli TSLA 2025-08-28 12:30 `
+    -w 354.91 335.00 315.55 286.03 `
+    -d 365.36 340.45 334.34 319.51 `
+    --fractal-length 20 `
+    --atr-distance 2.0 `
+    --lookback 60 `
+    --merge-mode advanced `
+    --hvn-poc-mode `
+    --hvn-zone-width 1.5 `
+    --output json `
+    --save-db `
+    --verbose
+
+# =============================================================================
+# TEMPLATE 2: Quick Analysis (Essential Parameters Only)
+# =============================================================================
+
+# Basic command with just weekly/daily levels
+python -m confluence_system.confluence_cli TSLA 2025-08-28 12:30 `
+    -w 354.91 335.00 315.55 286.03 `
+    -d 365.36 340.45 334.34 319.51 `
+    --save-db `
+    --verbose
+
+# =============================================================================
+# TEMPLATE 3: Multiple Symbols Batch Processing
+# =============================================================================
+
+# Array of symbols to process
+$symbols = @("TSLA", "AAPL", "NVDA", "MSFT")
+$date = "2025-08-28"
+$time = "12:30"
+
+foreach ($symbol in $symbols) {
+    Write-Host "Processing $symbol..." -ForegroundColor Green
+    
+    # You'll need to update these levels for each symbol
+    switch ($symbol) {
+        "TSLA" {
+            $weekly = @(354.91, 335.00, 315.55, 286.03)
+            $daily = @(365.36, 340.45, 334.34, 319.51)
+        }
+        "AAPL" {
+            # Update these levels for AAPL
+            $weekly = @(230.00, 220.00, 210.00, 200.00)
+            $daily = @(235.00, 225.00, 215.00, 205.00)
+        }
+        # Add more symbols as needed
+        default {
+            Write-Warning "No levels defined for $symbol - skipping"
+            continue
+        }
+    }
+    
+    python -m confluence_system.confluence_cli $symbol $date $time `
+        -w $weekly[0] $weekly[1] $weekly[2] $weekly[3] `
+        -d $daily[0] $daily[1] $daily[2] $daily[3] `
+        --save-db `
+        --verbose
+    
+    Write-Host "Completed $symbol" -ForegroundColor Cyan
+    Write-Host "------------------------"
+}
+
+# =============================================================================
+# TEMPLATE 4: Custom Function for Easy Reuse
+# =============================================================================
+
+function Run-ConfluenceAnalysis {
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$Symbol,
+        
+        [Parameter(Mandatory=$true)]
+        [string]$Date,
+        
+        [Parameter(Mandatory=$true)]  
+        [string]$Time,
+        
+        [Parameter(Mandatory=$true)]
+        [decimal[]]$WeeklyLevels,
+        
+        [Parameter(Mandatory=$true)]
+        [decimal[]]$DailyLevels,
+        
+        [switch]$Verbose,
+        [switch]$SkipDatabase,
+        [string]$OutputFormat = "json",
+        [int]$FractalLength = 20,
+        [decimal]$ATRDistance = 2.0,
+        [int]$Lookback = 60,
+        [string]$MergeMode = "advanced",
+        [switch]$HVNPOCMode,
+        [decimal]$HVNZoneWidth = 1.5
+    )
+    
+    $cmd = @(
+        "python", "-m", "confluence_system.confluence_cli", 
+        $Symbol, $Date, $Time,
+        "-w", $WeeklyLevels[0], $WeeklyLevels[1], $WeeklyLevels[2], $WeeklyLevels[3],
+        "-d", $DailyLevels[0], $DailyLevels[1], $DailyLevels[2], $DailyLevels[3],
+        "--fractal-length", $FractalLength,
+        "--atr-distance", $ATRDistance,
+        "--lookback", $Lookback,
+        "--merge-mode", $MergeMode,
+        "--hvn-zone-width", $HVNZoneWidth,
+        "--output", $OutputFormat
+    )
+    
+    if ($HVNPOCMode) { $cmd += "--hvn-poc-mode" }
+    if (!$SkipDatabase) { $cmd += "--save-db" }
+    if ($Verbose) { $cmd += "--verbose" }
+    
+    Write-Host "Running: $($cmd -join ' ')" -ForegroundColor Yellow
+    & $cmd[0] $cmd[1..$cmd.Length]
+}
+
+# Example usage of the function:
+# Run-ConfluenceAnalysis -Symbol "TSLA" -Date "2025-08-28" -Time "12:30" `
+#     -WeeklyLevels @(354.91, 335.00, 315.55, 286.03) `
+#     -DailyLevels @(365.36, 340.45, 334.34, 319.51) `
+#     -Verbose -HVNPOCMode
+
+# =============================================================================
+# TEMPLATE 5: Current Date/Time Auto-Detection
+# =============================================================================
+
+# Get current date and time automatically
+$currentDate = Get-Date -Format "yyyy-MM-dd"
+$currentTime = Get-Date -Format "HH:mm"
+
+Write-Host "Using current date/time: $currentDate $currentTime" -ForegroundColor Green
+
+python -m confluence_system.confluence_cli TSLA $currentDate $currentTime `
+    -w 354.91 335.00 315.55 286.03 `
+    -d 365.36 340.45 334.34 319.51 `
+    --save-db `
+    --verbose
+
+# =============================================================================
+# PARAMETER REFERENCE
+# =============================================================================
+
+<#
+Required Parameters:
+- SYMBOL: Stock ticker (e.g., TSLA, AAPL)
+- DATE: Analysis date in YYYY-MM-DD format
+- TIME: Analysis time in HH:MM format
+- -w W1 W2 W3 W4: Weekly resistance/support levels (4 levels required)
+- -d D1 D2 D3 D4: Daily resistance/support levels (4 levels required)
+
+Optional Parameters:
+- --fractal-length N: Fractal detection period (default: 20)
+- --atr-distance N: ATR multiplier for zone width (default: 2.0) 
+- --lookback N: Days to look back for analysis (default: 60)
+- --merge-mode MODE: Zone merging strategy (basic/advanced)
+- --hvn-poc-mode: Use High Volume Node Point of Control mode
+- --hvn-zone-width N: HVN zone width multiplier (default: 1.5)
+- --output FORMAT: Output format (json/table)
+- --save-db: Save results to Supabase database (enables Sierra Chart export)
+- --skip-existing: Skip if analysis already exists in database
+- --verbose: Show detailed output
+
+Auto-Export Features (when using --save-db):
+- Automatically exports zones to Sierra Chart JSON format
+- Creates files in C:\SierraChart\Data\Zones\
+- Sierra Chart ACSIL study picks up changes automatically
+- No manual export step required
+#>
+
+# =============================================================================
+# QUICK START EXAMPLES
+# =============================================================================
+
+# 1. Basic analysis with database save (most common):
+# python -m confluence_system.confluence_cli TSLA 2025-08-28 12:30 -w 354.91 335.00 315.55 286.03 -d 365.36 340.45 334.34 319.51 --save-db --verbose
+
+# 2. Analysis without database (testing):
+# python -m confluence_system.confluence_cli TSLA 2025-08-28 12:30 -w 354.91 335.00 315.55 286.03 -d 365.36 340.45 334.34 319.51 --verbose
+
+# 3. Advanced analysis with all parameters:
+# python -m confluence_system.confluence_cli TSLA 2025-08-28 12:30 -w 354.91 335.00 315.55 286.03 -d 365.36 340.45 334.34 319.51 --fractal-length 25 --atr-distance 1.8 --lookback 90 --merge-mode advanced --hvn-poc-mode --hvn-zone-width 2.0 --save-db --verbose
+
+Write-Host "PowerShell templates loaded successfully!" -ForegroundColor Green
+Write-Host "Copy and modify the templates above for your analysis needs." -ForegroundColor Cyan

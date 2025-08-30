@@ -290,22 +290,22 @@ def display_results(fractals: dict, ticker: str, start_time: datetime, df: pd.Da
             ll = recent_lows[0]['price'] < recent_lows[1]['price']
             
             if hh and hl:
-                print("  → Structure: UPTREND (Higher Highs & Higher Lows)")
+                print("  -> Structure: UPTREND (Higher Highs & Higher Lows)")
             elif lh and ll:
-                print("  → Structure: DOWNTREND (Lower Highs & Lower Lows)")
+                print("  -> Structure: DOWNTREND (Lower Highs & Lower Lows)")
             elif hh and ll:
-                print("  → Structure: EXPANDING (Higher Highs & Lower Lows)")
+                print("  -> Structure: EXPANDING (Higher Highs & Lower Lows)")
             elif lh and hl:
-                print("  → Structure: CONTRACTING (Lower Highs & Higher Lows)")
+                print("  -> Structure: CONTRACTING (Lower Highs & Higher Lows)")
             else:
-                print("  → Structure: MIXED/TRANSITIONING")
+                print("  -> Structure: MIXED/TRANSITIONING")
                 
             # Show current position relative to recent swings
             current_high = recent_highs[0]['price'] if recent_highs else 0
             current_low = recent_lows[0]['price'] if recent_lows else 0
-            print(f"  → Recent High: ${current_high:.2f}")
-            print(f"  → Recent Low: ${current_low:.2f}")
-            print(f"  → Range: ${(current_high - current_low):.2f}")
+            print(f"  -> Recent High: ${current_high:.2f}")
+            print(f"  -> Recent Low: ${current_low:.2f}")
+            print(f"  -> Range: ${(current_high - current_low):.2f}")
     
     print(f"\n{'='*70}")
     print(f"Parameters: Fractal Length={config.FRACTAL_LENGTH}, "
@@ -323,9 +323,9 @@ def main():
         print("\nTesting connection to Polygon server...")
         fetcher = DataFetcher()
         if fetcher.test_connection():
-            print(f"✓ Successfully connected to Polygon server at {config.POLYGON_SERVER_URL}")
+            print(f"SUCCESS: Connected to Polygon server at {config.POLYGON_SERVER_URL}")
         else:
-            print(f"✗ Failed to connect to Polygon server at {config.POLYGON_SERVER_URL}")
+            print(f"ERROR: Failed to connect to Polygon server at {config.POLYGON_SERVER_URL}")
         sys.exit(0)
     
     # Parse datetime as UTC
@@ -360,10 +360,10 @@ def main():
             timeframe="minute",
             multiplier=config.AGGREGATION_MULTIPLIER
         )
-        print(f"✓ Successfully fetched {len(df)} bars")
+        print(f"SUCCESS: Fetched {len(df)} bars")
         
     except Exception as e:
-        print(f"✗ Error fetching data: {str(e)}")
+        print(f"ERROR: Fetching data: {str(e)}")
         sys.exit(1)
     
     # Detect fractals

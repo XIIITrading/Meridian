@@ -13,6 +13,14 @@ from tabulate import tabulate
 
 sys.path.insert(0, str(Path(__file__).parent))
 
+# Database integration imports
+try:
+    from database.service import DatabaseService
+    DB_AVAILABLE = True
+except ImportError:
+    DB_AVAILABLE = False
+    print("Note: Database module not available. Install dependencies for database support.")
+
 def parse_arguments():
     """Parse command line arguments"""
     parser = argparse.ArgumentParser(
@@ -126,6 +134,19 @@ def parse_arguments():
         type=float,
         default=0.5,
         help='HVN zone width as multiplier of M15 ATR (default: 0.5 for half ATR)'
+    )
+    
+    # Database integration arguments
+    parser.add_argument(
+        '--save-db',
+        action='store_true',
+        help='Save results to Supabase database (levels_zones table)'
+    )
+    
+    parser.add_argument(
+        '--skip-existing',
+        action='store_true',
+        help='Skip if analysis already exists in database'
     )
     
     return parser.parse_args()
@@ -521,10 +542,98 @@ def main():
             if args.save_file:
                 with open(args.save_file, 'w') as f:
                     json.dump(results, f, indent=2)
-                print(f"✓ Results saved to {args.save_file}")
+                print(f"SUCCESS: Results saved to {args.save_file}")
             else:
                 # Print to stdout
                 print(json.dumps(results, indent=2))
+        
+        # Save to database if requested
+        if args.save_db:
+            if not DB_AVAILABLE:
+                print("\nERROR: Database module not available. Install database dependencies to use --save-db")
+                sys.exit(1)
+            
+            try:
+                print(f"\n{'='*60}")
+                print("SAVING TO SUPABASE DATABASE")
+                print(f"{'='*60}")
+                
+                # Initialize database service
+                db_service = DatabaseService()
+                if not db_service.enabled:
+                    print("ERROR: Database service not enabled. Check .env configuration.")
+                    sys.exit(1)
+                
+                print("SUCCESS: Connected to database")
+                
+                # Save analysis results
+                response = db_service.save_cli_output(
+                    ticker=args.ticker,
+                    session_date=args.date,
+                    analysis_time=args.time,
+                    results=results,
+                    skip_existing=args.skip_existing
+                )
+                
+                # Display results
+                if response.get('success'):
+                    print(f"SUCCESS: Analysis saved successfully")
+                    if response.get('levels_zones_saved'):
+                        print(f"SUCCESS: Saved {response['levels_zones_saved']} zone records")
+                    if response.get('confluence_saved'):
+                        print(f"SUCCESS: Saved enhanced confluence analysis")
+                    if response.get('skipped'):
+                        print(f"WARNING: Skipped {response['skipped']} existing records")
+                else:
+                    print(f"ERROR: Database save failed: {response.get('error', 'Unknown error')}")
+                    if args.verbose:
+                        print(f"Details: {response}")
+                
+                print(f"{'='*60}")
+                
+                # Auto-export to Sierra Chart after successful database save
+                if response.get('success'):
+                    try:
+                        print(f"\n{'='*60}")
+                        print("AUTO-EXPORTING TO SIERRA CHART")
+                        print(f"{'='*60}")
+                        
+                        # Import Sierra Chart integration
+                        from .sierra_chart.main import SierraChartIntegration
+                        
+                        # Initialize and run export
+                        sierra_integration = SierraChartIntegration()
+                        export_result = sierra_integration.export_zones_for_symbol(
+                            symbol=args.ticker,
+                            session_date=args.date,
+                            export_all_formats=True
+                        )
+                        
+                        if export_result.get('success'):
+                            print("SUCCESS: Zones exported to Sierra Chart")
+                            if export_result.get('zones_exported'):
+                                print(f"SUCCESS: Exported {export_result['zones_exported']} zones")
+                            if export_result.get('files_created'):
+                                for file_path in export_result['files_created']:
+                                    print(f"SUCCESS: Created {file_path}")
+                        else:
+                            print(f"WARNING: Sierra Chart export failed: {export_result.get('error', 'Unknown error')}")
+                        
+                        print(f"{'='*60}")
+                        
+                    except ImportError:
+                        print("WARNING: Sierra Chart module not available - skipping auto-export")
+                    except Exception as e:
+                        print(f"WARNING: Sierra Chart export error: {e}")
+                        if args.verbose:
+                            import traceback
+                            traceback.print_exc()
+                
+            except Exception as e:
+                print(f"\nERROR: Database save error: {e}")
+                if args.verbose:
+                    import traceback
+                    traceback.print_exc()
         
     except Exception as e:
         print(f"\nError: {e}")

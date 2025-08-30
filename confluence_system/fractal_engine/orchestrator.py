@@ -187,9 +187,9 @@ class FractalOrchestrator:
             'lows': [s for s in filtered if s['type'] == 'low']
         }
         
-        print(f"[Fractal Engine] Overlap filter: {len(fractals['highs'])} highs → "
+        print(f"[Fractal Engine] Overlap filter: {len(fractals['highs'])} highs -> "
               f"{len(filtered_fractals['highs'])} highs, "
-              f"{len(fractals['lows'])} lows → {len(filtered_fractals['lows'])} lows")
+              f"{len(fractals['lows'])} lows -> {len(filtered_fractals['lows'])} lows")
         
         return filtered_fractals
         

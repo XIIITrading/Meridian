@@ -161,7 +161,7 @@ class DataFetcher:
             # Filter to only include bars within our date range (in case server returns extra)
             df = df[(df['datetime'] >= start_date) & (df['datetime'] <= end_date)]
             
-            print(f"✓ Successfully fetched {len(df)} bars")
+            print(f"SUCCESS: Fetched {len(df)} bars")
             
             return df.sort_values('datetime').reset_index(drop=True)
             
